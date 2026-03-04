@@ -1,0 +1,14 @@
+[package]
+name = "mc-integration-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# This crate exists solely for integration tests.
+# It has no library or binary targets.
+
+[dev-dependencies]
+mc-sdk = { path = "../mc-sdk" }
+mc-core = { path = "../mc-core" }
+anyhow.workspace = true
+serde_json.workspace = true

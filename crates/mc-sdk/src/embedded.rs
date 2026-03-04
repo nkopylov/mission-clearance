@@ -220,6 +220,30 @@ impl EmbeddedKernel {
         Ok(response)
     }
 
+    /// Rotate a vault credential to a new value.
+    pub fn vault_rotate(&self, entry_id: &str, new_value: &str) -> Result<()> {
+        let uuid = uuid::Uuid::parse_str(entry_id)
+            .map(mc_core::id::VaultEntryId::from_uuid)
+            .context("invalid vault entry ID")?;
+
+        let vault = self.state.vault.lock().unwrap();
+        vault
+            .rotate(&uuid, new_value)
+            .context("failed to rotate vault entry")
+    }
+
+    /// Revoke a vault credential.
+    pub fn vault_revoke(&self, entry_id: &str) -> Result<()> {
+        let uuid = uuid::Uuid::parse_str(entry_id)
+            .map(mc_core::id::VaultEntryId::from_uuid)
+            .context("invalid vault entry ID")?;
+
+        let vault = self.state.vault.lock().unwrap();
+        vault
+            .revoke(&uuid)
+            .context("failed to revoke vault entry")
+    }
+
     // ---- Operations ----
 
     /// Submit an operation request for evaluation.
@@ -341,6 +365,96 @@ impl EmbeddedKernel {
                 }),
             );
         }
+
+        let decision_str = match decision.kind {
+            PolicyDecisionKind::Allow => "allowed",
+            PolicyDecisionKind::Deny => "denied",
+            PolicyDecisionKind::Escalate => "escalated",
+        };
+
+        Ok(OperationDecisionResponse {
+            decision: decision_str.to_string(),
+            reasoning: decision.reasoning,
+            request_id: request_id.to_string(),
+        })
+    }
+
+    /// Submit an operation request with an explicit `OperationContext`.
+    ///
+    /// This variant allows callers to specify Shell, Http, or Database context
+    /// so the classifier can produce appropriate risk classifications.
+    pub fn submit_operation_with_context(
+        &self,
+        mission_token: &str,
+        resource: &str,
+        operation: &str,
+        justification: &str,
+        context: OperationContext,
+    ) -> Result<OperationDecisionResponse> {
+        let token_uuid = uuid::Uuid::parse_str(mission_token)
+            .context("invalid mission token")?;
+        let token = MissionToken::from_uuid(token_uuid);
+
+        let op = parse_operation(operation)?;
+        let resource_uri = ResourceUri::new(resource)
+            .context("invalid resource URI")?;
+
+        let mgr = self.state.mission_manager.lock().unwrap();
+        let mission_id = mgr
+            .resolve_token(&token)
+            .context("unknown mission token")?;
+
+        let mission = mgr
+            .get(&mission_id)
+            .context("mission not found")?;
+
+        if !mission.is_active() {
+            anyhow::bail!("mission is not active");
+        }
+
+        let has_capability = mc_kernel::checker::CapabilityChecker::check(
+            &mgr,
+            &mission_id,
+            &resource_uri,
+            &op,
+        );
+
+        let request_id = RequestId::new();
+
+        if has_capability.is_none() {
+            return Ok(OperationDecisionResponse {
+                decision: "denied".to_string(),
+                reasoning: "No matching capability for this resource and operation".to_string(),
+                request_id: request_id.to_string(),
+            });
+        }
+
+        let op_request = OperationRequest {
+            id: request_id,
+            mission_id,
+            resource: resource_uri,
+            operation: op,
+            context,
+            justification: justification.to_string(),
+            chain: vec![],
+            timestamp: chrono::Utc::now(),
+        };
+
+        let classification = mc_kernel::classifier::OperationClassifier::classify(&op_request);
+
+        let eval_context = EvaluationContext {
+            mission_goal: mission.goal.clone(),
+            mission_chain: vec![],
+            recent_operations: vec![],
+            anomaly_history: vec![],
+        };
+
+        drop(mgr);
+
+        let decision = self
+            .state
+            .policy_pipeline
+            .evaluate(&op_request, &classification, &eval_context);
 
         let decision_str = match decision.kind {
             PolicyDecisionKind::Allow => "allowed",

@@ -1,0 +1,51 @@
+# Mission Clearance — Default Configuration
+#
+# This file contains sensible defaults for all subsystems.
+# Override individual values via environment variables or a local config file.
+
+[kernel]
+max_delegation_depth = 10
+default_mission_timeout = "2h"
+fail_closed = true
+
+[vault]
+path = "~/.mission-clearance/vault.db"
+master_key_source = "passphrase"
+
+[api]
+listen = "127.0.0.1:9090"
+
+[adapters.http]
+listen = "127.0.0.1:8080"
+tls_inspection = true
+ca_cert_path = "~/.mission-clearance/ca.pem"
+
+[adapters.db]
+listen = "127.0.0.1:5433"
+upstream_protocol = "postgres"
+
+[adapters.shell]
+sandbox = "none"
+
+[adapters.tool_call]
+mode = "wrapper"
+
+[policy_pipeline]
+layers = ["deterministic", "llm", "human"]
+
+[policy_pipeline.llm]
+provider = "anthropic"
+model = "claude-sonnet-4-6"
+max_context_events = 50
+
+[policy_pipeline.human]
+interface = "terminal"
+timeout = "5m"
+
+[trace]
+path = "~/.mission-clearance/trace.db"
+chain_integrity = true
+graph_export_format = "dot"
+
+[operation_policies]
+include = ["defaults"]

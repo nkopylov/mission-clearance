@@ -1123,6 +1123,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-integration-tests"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "mc-core",
+ "mc-sdk",
+ "serde_json",
+]
+
+[[package]]
 name = "mc-kernel"
 version = "0.1.0"
 dependencies = [

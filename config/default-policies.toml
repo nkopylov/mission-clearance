@@ -1,0 +1,40 @@
+# Built-in operation policy templates for Mission Clearance
+#
+# These policies define the deterministic safety rules that are evaluated
+# before any LLM or human review. Higher priority rules are evaluated first.
+
+[policy.no-catastrophic-destruction]
+description = "Deny operations classified as catastrophic and irreversible"
+deny_when = "destructiveness == Catastrophic AND reversibility == Irreversible"
+scope = "global"
+priority = 100
+
+[policy.no-exfiltration]
+description = "Deny operations suspected of data exfiltration"
+deny_when = "data_flow == ExfiltrationSuspected"
+scope = "global"
+priority = 90
+
+[policy.no-self-modification]
+description = "Deny operations targeting the permission system itself"
+deny_when = "resource contains 'mission-clearance' OR resource contains 'system-prompt'"
+scope = "global"
+priority = 95
+
+[policy.no-privilege-escalation]
+description = "Deny operations matching known malicious patterns"
+deny_when = "pattern == KnownMalicious"
+scope = "global"
+priority = 85
+
+[policy.unknown-destination-review]
+description = "Escalate outbound requests to unknown destinations for review"
+escalate_when = "data_flow == Outbound AND target_trust == Unknown"
+scope = "global"
+priority = 50
+
+[policy.goal-drift-detection]
+description = "Escalate operations that appear unrelated to the mission goal"
+escalate_when = "goal_relevance == Unrelated OR goal_relevance == Contradictory"
+scope = "global"
+priority = 40
