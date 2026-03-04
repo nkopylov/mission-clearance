@@ -1,0 +1,19 @@
+[package]
+name = "mc-policy"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mc-core = { path = "../mc-core" }
+mc-kernel = { path = "../mc-kernel" }
+mc-trace = { path = "../mc-trace" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+reqwest = { version = "0.12", features = ["json"] }
+sha2 = "0.10"
+hex = "0.4"
