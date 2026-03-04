@@ -1,0 +1,25 @@
+[package]
+name = "mc-adapters"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mc-core = { path = "../mc-core" }
+mc-kernel = { path = "../mc-kernel" }
+mc-policy = { path = "../mc-policy" }
+mc-vault = { path = "../mc-vault" }
+mc-trace = { path = "../mc-trace" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+async-trait.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+bytes = "1"
+sqlparser = { version = "0.52", features = ["visitor"] }
