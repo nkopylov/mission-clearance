@@ -431,6 +431,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-kernel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "mc-core",
+ "mc-trace",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "mc-trace"
 version = "0.1.0"
 dependencies = [
