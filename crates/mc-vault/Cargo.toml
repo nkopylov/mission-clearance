@@ -1,0 +1,19 @@
+[package]
+name = "mc-vault"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mc-core = { path = "../mc-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+rusqlite = { version = "0.32", features = ["bundled"] }
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+zeroize = { version = "1", features = ["derive"] }
+uuid.workspace = true
+tracing.workspace = true
