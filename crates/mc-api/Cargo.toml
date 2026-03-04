@@ -1,0 +1,25 @@
+[package]
+name = "mc-api"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mc-core = { path = "../mc-core" }
+mc-kernel = { path = "../mc-kernel" }
+mc-policy = { path = "../mc-policy" }
+mc-vault = { path = "../mc-vault" }
+mc-trace = { path = "../mc-trace" }
+mc-adapters = { path = "../mc-adapters" }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+axum = { version = "0.8", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
