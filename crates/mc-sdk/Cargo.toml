@@ -1,0 +1,20 @@
+[package]
+name = "mc-sdk"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mc-core = { path = "../mc-core" }
+mc-kernel = { path = "../mc-kernel" }
+mc-policy = { path = "../mc-policy" }
+mc-vault = { path = "../mc-vault" }
+mc-trace = { path = "../mc-trace" }
+mc-api = { path = "../mc-api" }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+reqwest = { version = "0.12", features = ["json"] }
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true

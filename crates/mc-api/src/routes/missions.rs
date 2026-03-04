@@ -37,7 +37,7 @@ pub struct CreateMissionRequest {
     pub policies: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct CapabilitySpec {
     pub resource_pattern: String,
     #[serde(default)]
@@ -46,7 +46,7 @@ pub struct CapabilitySpec {
     pub delegatable: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct MissionResponse {
     pub id: String,
     pub token: String,

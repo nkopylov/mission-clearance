@@ -34,7 +34,7 @@ pub struct OperationSubmitRequest {
     pub justification: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct OperationDecisionResponse {
     pub decision: String,
     pub reasoning: String,

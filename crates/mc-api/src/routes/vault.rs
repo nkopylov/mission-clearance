@@ -34,7 +34,7 @@ pub struct AddEntryRequest {
     pub bound_to: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct VaultEntryResponse {
     pub id: String,
     pub name: String,
