@@ -64,6 +64,10 @@ pub struct EvaluationContext {
     pub recent_operations: Vec<OperationSummary>,
     /// Any anomaly events in the mission's history.
     pub anomaly_history: Vec<String>,
+    /// Whether the operation targets a file that was written earlier in the same session.
+    /// Used by the execute-after-write-review rule to detect write-then-execute attacks.
+    #[serde(default)]
+    pub executes_session_written_file: bool,
 }
 
 /// A summary of a previously executed operation, used in evaluation context.

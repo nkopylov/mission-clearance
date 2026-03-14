@@ -97,6 +97,7 @@ async fn test_policy(
         mission_chain: vec![],
         recent_operations: vec![],
         anomaly_history: vec![],
+        executes_session_written_file: false,
     };
 
     let decision = state

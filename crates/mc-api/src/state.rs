@@ -10,6 +10,9 @@ pub struct AppState {
     pub event_log: Mutex<mc_trace::event_log::EventLog>,
     pub graph: Mutex<mc_trace::graph::MissionGraph>,
     pub policy_pipeline: mc_policy::pipeline::PolicyPipeline,
+    /// Feedback loop for automatic pattern learning from LLM judge disagreements.
+    /// Enabled by default when running from the project directory.
+    pub feedback_loop: Option<mc_policy::feedback::FeedbackLoop>,
 }
 
 impl AppState {
@@ -23,6 +26,7 @@ impl AppState {
             event_log: Mutex::new(mc_trace::event_log::EventLog::new(":memory:").unwrap()),
             graph: Mutex::new(mc_trace::graph::MissionGraph::new(":memory:").unwrap()),
             policy_pipeline: mc_policy::pipeline::PolicyPipeline::new(),
+            feedback_loop: None,
         })
     }
 }

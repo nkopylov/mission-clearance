@@ -362,6 +362,7 @@ mod tests {
                 pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
                 pipeline
             },
+            feedback_loop: None,
         });
 
         let mission_token = {
@@ -469,6 +470,7 @@ mod tests {
                 pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
                 pipeline
             },
+            feedback_loop: None,
         });
 
         // Step 1: Create a mission with capability.
@@ -690,6 +692,7 @@ mod tests {
                 pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
                 pipeline
             },
+            feedback_loop: None,
         });
 
         let app = create_router(state);

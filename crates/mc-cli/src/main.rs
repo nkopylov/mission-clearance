@@ -233,6 +233,7 @@ async fn cmd_start(config: Config) -> Result<()> {
             pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
             pipeline
         },
+        feedback_loop: mc_policy::feedback::FeedbackLoop::auto_detect(),
     });
 
     let app = mc_api::create_router(state);

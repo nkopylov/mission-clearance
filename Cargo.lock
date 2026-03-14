@@ -1127,8 +1127,14 @@ name = "mc-integration-tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
+ "mc-api",
  "mc-core",
+ "mc-kernel",
+ "mc-policy",
  "mc-sdk",
+ "mc-trace",
+ "mc-vault",
  "serde_json",
 ]
 

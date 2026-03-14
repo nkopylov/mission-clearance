@@ -4,6 +4,21 @@ use mc_core::policy::{
     EvaluationContext, PolicyDecision, PolicyDecisionKind, PolicyEvaluator, PolicyEvaluatorType,
 };
 
+/// Record of a single evaluator's decision within the pipeline.
+#[derive(Debug, Clone)]
+pub struct EvaluatorTrace {
+    pub evaluator_type: PolicyEvaluatorType,
+    pub decision: PolicyDecisionKind,
+    pub reasoning: String,
+}
+
+/// Result of `evaluate_with_trace`: the final decision plus per-evaluator records.
+#[derive(Debug)]
+pub struct PipelineResult {
+    pub decision: PolicyDecision,
+    pub trace: Vec<EvaluatorTrace>,
+}
+
 /// Policy pipeline orchestrator.
 ///
 /// Chains multiple policy evaluators in order. The pipeline processes
@@ -36,6 +51,68 @@ impl PolicyPipeline {
     /// Return the number of evaluators in the pipeline.
     pub fn evaluator_count(&self) -> usize {
         self.evaluators.len()
+    }
+
+    /// Evaluate a request, returning the final decision plus per-evaluator trace.
+    ///
+    /// Same pipeline logic as `evaluate()`, but records each evaluator's
+    /// individual decision before applying short-circuit rules.
+    pub fn evaluate_with_trace(
+        &self,
+        request: &OperationRequest,
+        classification: &OperationClassification,
+        context: &EvaluationContext,
+    ) -> PipelineResult {
+        if self.evaluators.is_empty() {
+            let decision = PolicyDecision {
+                policy_id: PolicyId::new(),
+                kind: PolicyDecisionKind::Deny,
+                reasoning: "Empty pipeline: fail closed".to_string(),
+                evaluator: PolicyEvaluatorType::Deterministic,
+            };
+            return PipelineResult {
+                decision,
+                trace: vec![],
+            };
+        }
+
+        let mut trace = Vec::new();
+        let mut last_decision: Option<PolicyDecision> = None;
+
+        for evaluator in &self.evaluators {
+            let decision = evaluator.evaluate(request, classification, context);
+
+            trace.push(EvaluatorTrace {
+                evaluator_type: decision.evaluator,
+                decision: decision.kind,
+                reasoning: decision.reasoning.clone(),
+            });
+
+            match decision.kind {
+                PolicyDecisionKind::Deny => {
+                    return PipelineResult { decision, trace };
+                }
+                PolicyDecisionKind::Allow => {
+                    last_decision = Some(decision);
+                }
+                PolicyDecisionKind::Escalate => {
+                    last_decision = Some(decision);
+                    continue;
+                }
+            }
+        }
+
+        let decision = match &last_decision {
+            Some(d) if d.kind == PolicyDecisionKind::Allow => last_decision.unwrap(),
+            _ => PolicyDecision {
+                policy_id: PolicyId::new(),
+                kind: PolicyDecisionKind::Deny,
+                reasoning: "Pipeline exhausted with no Allow decision: fail closed".to_string(),
+                evaluator: PolicyEvaluatorType::Deterministic,
+            },
+        };
+
+        PipelineResult { decision, trace }
     }
 
     /// Evaluate a request through the pipeline.
@@ -108,7 +185,8 @@ mod tests {
     use mc_core::id::{MissionId, RequestId};
     use mc_core::operation::{
         BlastRadius, DataFlowDirection, Destructiveness, GoalRelevance, Operation,
-        OperationClassification, OperationContext, OperationPattern, Reversibility, TrustLevel,
+        OperationClassification, OperationContext, OperationPattern, OperationSignals,
+        Reversibility, TrustLevel,
     };
     use mc_core::resource::ResourceUri;
 
@@ -138,6 +216,7 @@ mod tests {
             target_trust: TrustLevel::Known,
             pattern: OperationPattern::Normal,
             goal_relevance: GoalRelevance::DirectlyRelevant,
+            signals: OperationSignals::default(),
         }
     }
 
@@ -150,6 +229,7 @@ mod tests {
             target_trust: TrustLevel::Known,
             pattern: OperationPattern::Normal,
             goal_relevance: GoalRelevance::DirectlyRelevant,
+            signals: OperationSignals::default(),
         }
     }
 
@@ -159,6 +239,7 @@ mod tests {
             mission_chain: vec![],
             recent_operations: vec![],
             anomaly_history: vec![],
+            executes_session_written_file: false,
         }
     }
 
@@ -266,6 +347,7 @@ mod tests {
             mission_chain: vec!["Release v2".to_string()],
             recent_operations: vec![],
             anomaly_history: vec![],
+            executes_session_written_file: false,
         };
         let decision = pipeline.evaluate(&req, &cls, &ctx);
 
@@ -339,5 +421,70 @@ mod tests {
     fn default_pipeline_is_empty() {
         let pipeline = PolicyPipeline::default();
         assert_eq!(pipeline.evaluator_count(), 0);
+    }
+
+    // ---- evaluate_with_trace tests ----
+
+    #[test]
+    fn trace_captures_all_evaluators() {
+        let mut pipeline = PolicyPipeline::new();
+        pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
+        pipeline.add_evaluator(Box::new(MockLlmJudge::always_allow()));
+
+        let req = make_request("shell://localhost/bin");
+        let cls = normal_classification();
+        let result = pipeline.evaluate_with_trace(&req, &cls, &default_context());
+
+        assert_eq!(result.decision.kind, PolicyDecisionKind::Allow);
+        assert_eq!(result.trace.len(), 2);
+        assert_eq!(result.trace[0].evaluator_type, PolicyEvaluatorType::Deterministic);
+        assert_eq!(result.trace[1].evaluator_type, PolicyEvaluatorType::Llm);
+    }
+
+    #[test]
+    fn trace_records_deny_short_circuit() {
+        let mut pipeline = PolicyPipeline::new();
+        pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
+        pipeline.add_evaluator(Box::new(MockLlmJudge::always_allow()));
+
+        let req = make_request("shell://localhost/bin");
+        let cls = catastrophic_classification();
+        let result = pipeline.evaluate_with_trace(&req, &cls, &default_context());
+
+        assert_eq!(result.decision.kind, PolicyDecisionKind::Deny);
+        // Only deterministic ran before short-circuit
+        assert_eq!(result.trace.len(), 1);
+        assert_eq!(result.trace[0].evaluator_type, PolicyEvaluatorType::Deterministic);
+        assert_eq!(result.trace[0].decision, PolicyDecisionKind::Deny);
+    }
+
+    #[test]
+    fn trace_captures_disagreement() {
+        let mut pipeline = PolicyPipeline::new();
+        pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
+        pipeline.add_evaluator(Box::new(MockLlmJudge::always_deny("suspicious")));
+
+        let req = make_request("shell://localhost/bin");
+        let cls = normal_classification();
+        let result = pipeline.evaluate_with_trace(&req, &cls, &default_context());
+
+        // LLM denies, final is Deny
+        assert_eq!(result.decision.kind, PolicyDecisionKind::Deny);
+        assert_eq!(result.trace.len(), 2);
+        // Deterministic allowed, LLM denied — a disagreement
+        assert_eq!(result.trace[0].decision, PolicyDecisionKind::Allow);
+        assert_eq!(result.trace[1].decision, PolicyDecisionKind::Deny);
+    }
+
+    #[test]
+    fn trace_empty_pipeline() {
+        let pipeline = PolicyPipeline::new();
+
+        let req = make_request("shell://localhost/bin");
+        let cls = normal_classification();
+        let result = pipeline.evaluate_with_trace(&req, &cls, &default_context());
+
+        assert_eq!(result.decision.kind, PolicyDecisionKind::Deny);
+        assert!(result.trace.is_empty());
     }
 }

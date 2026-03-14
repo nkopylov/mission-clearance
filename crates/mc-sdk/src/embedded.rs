@@ -8,7 +8,9 @@ use mc_api::routes::vault::VaultEntryResponse;
 use mc_api::state::AppState;
 use mc_core::capability::{Capability, Constraints};
 use mc_core::id::{CapabilityId, MissionToken, RequestId};
+use mc_kernel::signal_enricher::{HeuristicEnricher, SignalEnricher};
 use mc_core::operation::{Operation, OperationContext, OperationRequest};
+use mc_policy::feedback::FeedbackLoop;
 use mc_core::policy::{EvaluationContext, PolicyDecisionKind};
 use mc_core::resource::{ResourcePattern, ResourceUri};
 use mc_core::trace::TraceEventType;
@@ -22,6 +24,8 @@ use mc_policy::deterministic::DeterministicEvaluator;
 /// them in-process.
 pub struct EmbeddedKernel {
     state: Arc<AppState>,
+    signal_enricher: Box<dyn SignalEnricher>,
+    feedback_loop: Option<FeedbackLoop>,
 }
 
 impl EmbeddedKernel {
@@ -48,14 +52,32 @@ impl EmbeddedKernel {
                 pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
                 pipeline
             },
+            feedback_loop: None,
         });
 
-        Ok(Self { state })
+        Ok(Self {
+            state,
+            signal_enricher: Box::new(HeuristicEnricher::new()),
+            feedback_loop: FeedbackLoop::auto_detect(),
+        })
     }
 
     /// Create a new kernel wrapping existing `AppState` (useful for testing).
     pub fn with_state(state: Arc<AppState>) -> Self {
-        Self { state }
+        Self {
+            state,
+            signal_enricher: Box::new(HeuristicEnricher::new()),
+            feedback_loop: None,
+        }
+    }
+
+    /// Enable the feedback loop for automatic pattern learning.
+    ///
+    /// When enabled, disagreements between deterministic and LLM evaluators
+    /// trigger a sub-agent that modifies the source code pattern lists.
+    pub fn with_feedback_loop(mut self, project_root: std::path::PathBuf) -> Self {
+        self.feedback_loop = Some(FeedbackLoop::new(project_root));
+        self
     }
 
     /// Return a reference to the internal `AppState`.
@@ -326,7 +348,10 @@ impl EmbeddedKernel {
         };
 
         // Classify the operation.
-        let classification = mc_kernel::classifier::OperationClassifier::classify(&op_request);
+        let mut classification = mc_kernel::classifier::OperationClassifier::classify(&op_request);
+
+        // Enrich signals (e.g. analyze inline code for benign/dangerous patterns).
+        self.signal_enricher.enrich(&op_request, &mut classification);
 
         // Build evaluation context.
         let eval_context = EvaluationContext {
@@ -334,16 +359,24 @@ impl EmbeddedKernel {
             mission_chain: vec![],
             recent_operations: vec![],
             anomaly_history: vec![],
+            executes_session_written_file: false,
         };
 
         // Drop the manager lock before policy evaluation.
         drop(mgr);
 
-        // Run through the policy pipeline.
-        let decision = self
+        // Run through the policy pipeline with trace for feedback loop.
+        let pipeline_result = self
             .state
             .policy_pipeline
-            .evaluate(&op_request, &classification, &eval_context);
+            .evaluate_with_trace(&op_request, &classification, &eval_context);
+
+        // Trigger feedback loop if there's a disagreement.
+        if let Some(ref feedback) = self.feedback_loop {
+            feedback.check_and_learn(&pipeline_result.trace, &op_request, &classification);
+        }
+
+        let decision = pipeline_result.decision;
 
         // Log the result.
         let event_type = match decision.kind {
@@ -440,21 +473,30 @@ impl EmbeddedKernel {
             timestamp: chrono::Utc::now(),
         };
 
-        let classification = mc_kernel::classifier::OperationClassifier::classify(&op_request);
+        let mut classification = mc_kernel::classifier::OperationClassifier::classify(&op_request);
+        self.signal_enricher.enrich(&op_request, &mut classification);
 
         let eval_context = EvaluationContext {
             mission_goal: mission.goal.clone(),
             mission_chain: vec![],
             recent_operations: vec![],
             anomaly_history: vec![],
+            executes_session_written_file: false,
         };
 
         drop(mgr);
 
-        let decision = self
+        let pipeline_result = self
             .state
             .policy_pipeline
-            .evaluate(&op_request, &classification, &eval_context);
+            .evaluate_with_trace(&op_request, &classification, &eval_context);
+
+        // Trigger feedback loop if there's a disagreement.
+        if let Some(ref feedback) = self.feedback_loop {
+            feedback.check_and_learn(&pipeline_result.trace, &op_request, &classification);
+        }
+
+        let decision = pipeline_result.decision;
 
         let decision_str = match decision.kind {
             PolicyDecisionKind::Allow => "allowed",

@@ -29,7 +29,98 @@ impl ResourceUri {
         if !uri.contains("://") {
             return Err(ResourceError::InvalidUri(format!("missing scheme: {uri}")));
         }
-        Ok(Self(uri.to_string()))
+        let normalized = Self::normalize_uri(uri);
+        Ok(Self(normalized))
+    }
+
+    /// Normalize a URI by resolving path traversal segments in file:// URIs.
+    /// Resolves `..`, `//`, `./` so that `file:///etc/../etc/shadow` becomes `file:///etc/shadow`.
+    fn normalize_uri(uri: &str) -> String {
+        let Some((scheme, rest)) = uri.split_once("://") else {
+            return uri.to_string();
+        };
+
+        // Only canonicalize file:// and shell:// URIs
+        if scheme != "file" && scheme != "shell" {
+            return uri.to_string();
+        }
+
+        // Percent-decode the path portion to prevent %2e%2e bypass of .. normalization
+        let rest = Self::percent_decode(rest);
+        let rest_ref = rest.as_str();
+
+        // Split off the authority (host) from the path
+        // e.g. "localhost/bin/git" -> authority="localhost", path="/bin/git"
+        // e.g. "/etc/passwd" -> authority="", path="/etc/passwd"
+        let (authority, path) = if rest_ref.starts_with('/') && !rest_ref.starts_with("//") {
+            // No authority, path starts immediately: file:///etc/passwd
+            ("", rest_ref)
+        } else {
+            // Has authority: file://localhost/path or shell://localhost/path
+            match rest_ref.find('/') {
+                Some(idx) => (&rest_ref[..idx], &rest_ref[idx..]),
+                None => (rest_ref, ""),
+            }
+        };
+
+        let normalized_path = Self::normalize_path(path);
+        format!("{scheme}://{authority}{normalized_path}")
+    }
+
+    /// Decode percent-encoded characters in a URI path (e.g., `%2e` → `.`, `%2f` → `/`).
+    fn percent_decode(input: &str) -> String {
+        let mut result = String::with_capacity(input.len());
+        let mut chars = input.chars();
+        while let Some(c) = chars.next() {
+            if c == '%' {
+                let hex: String = chars.by_ref().take(2).collect();
+                if hex.len() == 2 {
+                    if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                        result.push(byte as char);
+                        continue;
+                    }
+                }
+                // Invalid percent encoding — keep as-is
+                result.push('%');
+                result.push_str(&hex);
+            } else {
+                result.push(c);
+            }
+        }
+        result
+    }
+
+    /// Normalize a path by resolving `.`, `..`, and collapsing `//`.
+    fn normalize_path(path: &str) -> String {
+        // Split into segments, resolve . and ..
+        let mut resolved: Vec<&str> = Vec::new();
+        for segment in path.split('/') {
+            match segment {
+                "" | "." => {
+                    // skip empty segments (from //) and current-dir refs
+                    // but preserve the leading empty segment for absolute paths
+                    if resolved.is_empty() {
+                        resolved.push("");
+                    }
+                }
+                ".." => {
+                    // Pop last segment, but don't go above root
+                    if resolved.len() > 1 {
+                        resolved.pop();
+                    }
+                }
+                _ => {
+                    resolved.push(segment);
+                }
+            }
+        }
+        if resolved.is_empty() {
+            return "/".to_string();
+        }
+        if resolved.len() == 1 && resolved[0].is_empty() {
+            return "/".to_string();
+        }
+        resolved.join("/")
     }
 
     pub fn scheme(&self) -> &str {
@@ -287,6 +378,51 @@ mod tests {
         let child = ResourcePattern::new("http://a.com/x/y").unwrap();
         let parent = ResourcePattern::new("https://a.com/x/*").unwrap();
         assert!(!child.is_subset_of(&parent));
+    }
+
+    // ---- Path canonicalization tests ----
+
+    #[test]
+    fn test_file_uri_path_traversal_normalized() {
+        let uri = ResourceUri::new("file:///etc/../etc/shadow").unwrap();
+        assert_eq!(uri.as_str(), "file:///etc/shadow");
+    }
+
+    #[test]
+    fn test_file_uri_double_slash_normalized() {
+        let uri = ResourceUri::new("file:///etc//passwd").unwrap();
+        assert_eq!(uri.as_str(), "file:///etc/passwd");
+    }
+
+    #[test]
+    fn test_file_uri_dot_normalized() {
+        let uri = ResourceUri::new("file:///etc/./passwd").unwrap();
+        assert_eq!(uri.as_str(), "file:///etc/passwd");
+    }
+
+    #[test]
+    fn test_file_uri_complex_traversal() {
+        let uri = ResourceUri::new("file:///home/user/../../etc/shadow").unwrap();
+        assert_eq!(uri.as_str(), "file:///etc/shadow");
+    }
+
+    #[test]
+    fn test_file_uri_traversal_above_root() {
+        let uri = ResourceUri::new("file:///../../etc/shadow").unwrap();
+        assert_eq!(uri.as_str(), "file:///etc/shadow");
+    }
+
+    #[test]
+    fn test_shell_uri_path_normalized() {
+        let uri = ResourceUri::new("shell://localhost/../../../bin/sh").unwrap();
+        assert_eq!(uri.as_str(), "shell://localhost/bin/sh");
+    }
+
+    #[test]
+    fn test_http_uri_not_normalized() {
+        // HTTP URIs are not normalized (server handles path resolution)
+        let uri = ResourceUri::new("http://example.com/../secret").unwrap();
+        assert_eq!(uri.as_str(), "http://example.com/../secret");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use mc_core::id::PolicyId;
-use mc_core::operation::{OperationClassification, OperationRequest};
+use mc_core::operation::{OperationClassification, OperationContext, OperationRequest};
 use mc_core::policy::{
     EvaluationContext, PolicyDecision, PolicyDecisionKind, PolicyEvaluator, PolicyEvaluatorType,
 };
@@ -85,6 +85,41 @@ impl LlmJudge {
         prompt.push_str(&format!("- Resource: {}\n", request.resource));
         prompt.push_str(&format!("- Operation: {:?}\n", request.operation));
         prompt.push_str(&format!("- Justification: {}\n", request.justification));
+
+        // Include full command content for shell operations
+        match &request.context {
+            OperationContext::Shell { command, args, .. } => {
+                let full_cmd = if args.is_empty() {
+                    command.clone()
+                } else {
+                    format!("{} {}", command, args.join(" "))
+                };
+                prompt.push_str(&format!("- Full Command: {}\n", full_cmd));
+            }
+            OperationContext::Database { query, database } => {
+                prompt.push_str(&format!("- Database: {}\n", database));
+                prompt.push_str(&format!("- Query: {}\n", query));
+            }
+            OperationContext::Http { method, body_preview, .. } => {
+                prompt.push_str(&format!("- HTTP Method: {}\n", method));
+                if let Some(body) = body_preview {
+                    prompt.push_str(&format!("- Body Preview: {}\n", body));
+                }
+            }
+            OperationContext::ToolCall { tool_name, arguments } => {
+                prompt.push_str(&format!("- Tool: {}\n", tool_name));
+                prompt.push_str(&format!("- Arguments: {}\n", arguments));
+            }
+            OperationContext::FileWrite { path, content_preview } => {
+                prompt.push_str(&format!("- File Path: {}\n", path));
+                let preview = if content_preview.len() > 500 {
+                    &content_preview[..500]
+                } else {
+                    content_preview.as_str()
+                };
+                prompt.push_str(&format!("- Content Preview:\n```\n{}\n```\n", preview));
+            }
+        }
         prompt.push('\n');
 
         // Classification
@@ -113,10 +148,41 @@ impl LlmJudge {
         ));
         prompt.push('\n');
 
+        // Extracted signals
+        let signals = &classification.signals;
+        prompt.push_str("## Extracted Signals\n");
+        prompt.push_str(&format!("- Reads Sensitive Source: {}\n", signals.reads_sensitive_source));
+        prompt.push_str(&format!("- Has Network Sink: {}\n", signals.has_network_sink));
+        prompt.push_str(&format!("- Executes Dynamic Code: {}\n", signals.executes_dynamic_code));
+        prompt.push_str(&format!("- Writes Persistence Point: {}\n", signals.writes_persistence_point));
+        prompt.push_str(&format!("- Modifies Security Controls: {}\n", signals.modifies_security_controls));
+        prompt.push_str(&format!("- Uses Obfuscation: {}\n", signals.uses_obfuscation));
+        prompt.push_str(&format!("- Has Pipe Chain: {}\n", signals.has_pipe_chain));
+        if let Some(ref taint) = signals.pipe_chain_taint {
+            prompt.push_str(&format!("- Pipe Chain Source-to-Sink Flow: {}\n", taint.source_to_sink_flow));
+            for seg in &taint.segments {
+                prompt.push_str(&format!("  - Segment: {:?} -> {:?}\n", seg.raw, seg.role));
+            }
+        }
+        match signals.dynamic_code_is_benign {
+            Some(true) => prompt.push_str("- Dynamic Code Assessment: BENIGN\n"),
+            Some(false) => prompt.push_str("- Dynamic Code Assessment: DANGEROUS\n"),
+            None => {
+                if signals.executes_dynamic_code {
+                    prompt.push_str("- Dynamic Code Assessment: UNCERTAIN\n");
+                }
+            }
+        }
+        prompt.push('\n');
+
         prompt.push_str(
             "## Decision Required\n\
              Should this operation be ALLOWED, DENIED, or ESCALATED to a human reviewer?\n\
-             Respond with JSON: {\"decision\": \"Allow\"|\"Deny\"|\"Escalate\", \"reasoning\": \"...\"}\n",
+             Respond with JSON: {\"decision\": \"Allow\"|\"Deny\"|\"Escalate\", \"reasoning\": \"...\"}\n\n\
+             If you detect a command, tool, path, or code pattern that the deterministic\n\
+             signals MISSED, mention it explicitly in your reasoning. For example:\n\
+             \"The command 'http' (httpie) is a network tool not in the detector's list.\"\n\
+             This helps the feedback loop learn new patterns.\n",
         );
 
         prompt
@@ -216,7 +282,8 @@ mod tests {
     use mc_core::id::{MissionId, RequestId};
     use mc_core::operation::{
         BlastRadius, DataFlowDirection, Destructiveness, GoalRelevance, Operation,
-        OperationClassification, OperationContext, OperationPattern, Reversibility, TrustLevel,
+        OperationClassification, OperationContext, OperationPattern, OperationSignals,
+        Reversibility, TrustLevel,
     };
     use mc_core::policy::OperationSummary;
     use mc_core::resource::ResourceUri;
@@ -247,6 +314,7 @@ mod tests {
             target_trust: TrustLevel::Known,
             pattern: OperationPattern::Normal,
             goal_relevance: GoalRelevance::DirectlyRelevant,
+            signals: OperationSignals::default(),
         }
     }
 
@@ -261,6 +329,7 @@ mod tests {
                 timestamp: Utc::now(),
             }],
             anomaly_history: vec![],
+            executes_session_written_file: false,
         }
     }
 
@@ -340,6 +409,7 @@ mod tests {
             mission_chain: vec![],
             recent_operations: vec![],
             anomaly_history: vec![],
+            executes_session_written_file: false,
         };
         let prompt = LlmJudge::build_prompt(&req, &cls, &ctx);
 

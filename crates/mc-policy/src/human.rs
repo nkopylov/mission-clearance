@@ -118,7 +118,8 @@ mod tests {
     use mc_core::id::{MissionId, RequestId};
     use mc_core::operation::{
         BlastRadius, DataFlowDirection, Destructiveness, GoalRelevance, Operation,
-        OperationClassification, OperationContext, OperationPattern, Reversibility, TrustLevel,
+        OperationClassification, OperationContext, OperationPattern, OperationSignals,
+        Reversibility, TrustLevel,
     };
     use mc_core::resource::ResourceUri;
 
@@ -148,6 +149,7 @@ mod tests {
             target_trust: TrustLevel::Known,
             pattern: OperationPattern::Normal,
             goal_relevance: GoalRelevance::DirectlyRelevant,
+            signals: OperationSignals::default(),
         }
     }
 
@@ -157,6 +159,7 @@ mod tests {
             mission_chain: vec![],
             recent_operations: vec![],
             anomaly_history: vec![],
+            executes_session_written_file: false,
         }
     }
 
