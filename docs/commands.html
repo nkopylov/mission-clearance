@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commands &amp; MCP Tools &mdash; Mission Clearance</title>
+  <meta name="description" content="Slash commands for session management and MCP tools used by Claude during Mission Clearance sessions.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">
+      <span class="shield">&#x1f6e1;</span> Mission Clearance
+    </a>
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="detection.html">Detection</a></li>
+      <li><a href="commands.html" class="active">Commands</a></li>
+      <li><a href="architecture.html">Architecture</a></li>
+      <li><a href="configuration.html">Configuration</a></li>
+      <li><a href="https://github.com/nickkopylov/mission-clearance" target="_blank">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main>
+
+  <div class="page-header">
+    <h1>Commands &amp; MCP Tools</h1>
+    <p>Slash commands for humans, MCP tools for Claude.</p>
+  </div>
+
+  <!-- How it works -->
+  <h2 class="section-heading">How the Hook/MCP Architecture Works</h2>
+  <p class="section-desc">
+    Mission Clearance integrates with Claude Code through two mechanisms:
+  </p>
+
+  <div class="cards" style="margin-bottom: 32px;">
+    <div class="card">
+      <h3>PreToolUse Hook</h3>
+      <p>
+        A Python script (<code>hooks/pre-tool-use.py</code>) registered via
+        <code>hooks.json</code>. It intercepts <strong>every</strong> tool call
+        Claude makes, enriches it with context (script contents, package lifecycle
+        hooks, cross-file function bodies), and sends it to the MC server for
+        policy evaluation. Runs transparently &mdash; no user action needed.
+      </p>
+    </div>
+    <div class="card">
+      <h3>MCP Server</h3>
+      <p>
+        A stdio JSON-RPC server (<code>scripts/mc-mcp-server.py</code>) that
+        exposes tools Claude can call directly. These tools let Claude manage
+        missions, handle escalations (approve/deny), query traces, and manage
+        vault credentials. Configured via <code>.mcp.json</code>.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Slash Commands</h3>
+      <p>
+        Markdown-based command definitions in <code>commands/*.md</code>. These
+        provide the user-facing interface: <code>/mission-clearance:start</code>,
+        <code>:stop</code>, <code>:status</code>, etc. Each command instructs
+        Claude to invoke the appropriate MCP tools.
+      </p>
+    </div>
+  </div>
+
+  <!-- Slash Commands -->
+  <h2 class="section-heading">Slash Commands</h2>
+  <p class="section-desc">
+    These commands are typed by the user in the Claude Code chat. Each one
+    instructs Claude to perform a specific session management action.
+  </p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Command</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/mission-clearance:start [goal]</code></td>
+          <td>Launch the MC server (if not already running), create a root mission scoped to the given goal, and activate gating. Saves session state to <code>.claude/mc-session.json</code>.</td>
+        </tr>
+        <tr>
+          <td><code>/mission-clearance:stop</code></td>
+          <td>Revoke the active mission and deactivate gating. The MC server continues running but no longer blocks tool calls.</td>
+        </tr>
+        <tr>
+          <td><code>/mission-clearance:status</code></td>
+          <td>Show the active mission, server health, recent decisions, and any detected anomalies.</td>
+        </tr>
+        <tr>
+          <td><code>/mission-clearance:trace [mode]</code></td>
+          <td>
+            View trace data. Modes:
+            <code>events</code> (all events),
+            <code>denials</code> (blocked operations),
+            <code>anomalies</code> (detected anomalies),
+            <code>graph</code> (mission delegation graph).
+          </td>
+        </tr>
+        <tr>
+          <td><code>/mission-clearance:vault &lt;action&gt;</code></td>
+          <td>
+            Manage encrypted credentials. Actions:
+            <code>add</code> (store a credential),
+            <code>list</code> (show metadata),
+            <code>rotate</code> (update a credential),
+            <code>revoke</code> (delete a credential).
+          </td>
+        </tr>
+        <tr>
+          <td><code>/mission-clearance:delegate &lt;goal&gt;</code></td>
+          <td>Create a sub-mission with narrowed permissions, delegated from the current active mission.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- MCP Tools -->
+  <h2 class="section-heading">MCP Tools</h2>
+  <p class="section-desc">
+    These tools are exposed via the MCP server and called by Claude during sessions.
+    They form the programmatic API for mission management, policy evaluation,
+    and escalation handling.
+  </p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Tool</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>mc_create_mission</code></td>
+          <td>Create a root mission with a goal and capabilities. Returns a mission ID used for all subsequent operations.</td>
+        </tr>
+        <tr>
+          <td><code>mc_get_mission</code></td>
+          <td>Get details of a mission by ID, including its status, capabilities, and child missions.</td>
+        </tr>
+        <tr>
+          <td><code>mc_delegate_mission</code></td>
+          <td>Delegate a sub-mission with narrowed permissions. The child mission cannot exceed the parent's capabilities.</td>
+        </tr>
+        <tr>
+          <td><code>mc_revoke_mission</code></td>
+          <td>Revoke a mission and all its sub-missions. Revocation cascades down the delegation tree.</td>
+        </tr>
+        <tr>
+          <td><code>mc_submit_operation</code></td>
+          <td>Submit an operation for policy evaluation. Returns Allow, Deny, or Escalate with an explanation.</td>
+        </tr>
+        <tr>
+          <td><code>mc_vault_add</code></td>
+          <td>Add a credential to the encrypted vault (AES-256-GCM with Argon2id key derivation).</td>
+        </tr>
+        <tr>
+          <td><code>mc_vault_list</code></td>
+          <td>List credentials stored in the vault. Returns metadata only &mdash; secrets are never exposed.</td>
+        </tr>
+        <tr>
+          <td><code>mc_vault_revoke</code></td>
+          <td>Revoke (delete) a vault credential by name.</td>
+        </tr>
+        <tr>
+          <td><code>mc_trace_events</code></td>
+          <td>Get trace events, optionally filtered by mission ID. Returns the append-only event log.</td>
+        </tr>
+        <tr>
+          <td><code>mc_trace_anomalies</code></td>
+          <td>Get detected anomalies: taint propagation, goal drift, prompt injection attempts.</td>
+        </tr>
+        <tr>
+          <td><code>mc_policy_test</code></td>
+          <td>Dry-run a policy evaluation without a mission context. Useful for testing rules.</td>
+        </tr>
+        <tr>
+          <td><code>mc_server_status</code></td>
+          <td>Check if the MC server is running and healthy. Returns version, uptime, and active mission count.</td>
+        </tr>
+        <tr>
+          <td><code>mc_approve_escalation</code></td>
+          <td>LLM Judge: approve an escalated operation. The approval is time-limited (5 minutes) and single-use.</td>
+        </tr>
+        <tr>
+          <td><code>mc_deny_escalation</code></td>
+          <td>LLM Judge: deny an escalated operation with a reason.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Escalation flow -->
+  <h2 class="section-heading">Escalation Flow</h2>
+  <p class="section-desc">
+    When the policy pipeline returns "Escalate," the hook pauses execution and
+    Claude itself acts as the judge. Here is the flow:
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <h3>Policy returns Escalate</h3>
+        <p>The deterministic layer cannot make a clear Allow/Deny decision. The operation is flagged for review.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <h3>Claude reviews the operation</h3>
+        <p>Claude receives the operation details, classification, and the reason for escalation. It evaluates the context and intent.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <h3>Claude calls approve or deny</h3>
+        <p>Claude invokes <code>mc_approve_escalation</code> or <code>mc_deny_escalation</code> with a reason. Approvals are time-limited to 5 minutes and single-use.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">4</div>
+      <div class="step-content">
+        <h3>Decision is recorded</h3>
+        <p>The escalation outcome is logged in the trace with the judge's reasoning, creating an audit trail.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page navigation -->
+  <div class="page-nav">
+    <a href="detection.html">
+      &larr; Detection
+      <span>What gets checked</span>
+    </a>
+    <a href="architecture.html">
+      Architecture &rarr;
+      <span>Crate map and internals</span>
+    </a>
+  </div>
+
+</main>
+
+<footer>
+  Mission Clearance &mdash; MIT License &mdash;
+  <a href="https://github.com/nickkopylov/mission-clearance">GitHub</a>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mission Clearance &mdash; Security Harness for Claude Code</title>
+  <meta name="description" content="Mission Clearance is a Claude Code plugin that acts as a security kernel for your coding sessions. It intercepts every tool call and evaluates it against capability-scoped policies.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">
+      <span class="shield">&#x1f6e1;</span> Mission Clearance
+    </a>
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="index.html" class="active">Home</a></li>
+      <li><a href="detection.html">Detection</a></li>
+      <li><a href="commands.html">Commands</a></li>
+      <li><a href="architecture.html">Architecture</a></li>
+      <li><a href="configuration.html">Configuration</a></li>
+      <li><a href="https://github.com/nickkopylov/mission-clearance" target="_blank">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="badges">
+      <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License">
+      <img src="https://img.shields.io/badge/rust-1.85%2B-orange.svg" alt="Rust 1.85+">
+    </div>
+    <h1><span class="highlight">Mission Clearance</span></h1>
+    <p class="tagline">
+      Security harness for Claude Code. Intercepts every tool call, evaluates it
+      against capability-scoped policies, and blocks dangerous operations before
+      they reach the outside world.
+    </p>
+  </section>
+
+  <!-- How it works -->
+  <h2 class="section-heading">How It Works</h2>
+  <p class="section-desc">
+    Think of it as an OS kernel for your AI agent: missions are processes,
+    capabilities are file descriptors, and policies are syscall filters. Every
+    external action is checked, classified, and logged in a tamper-evident trace.
+  </p>
+
+  <div class="flow-diagram">
+<pre>
+<span class="node">Claude Code</span> ──tool call──&gt; <span class="node">PreToolUse Hook</span> ──&gt; <span class="node">MC Server</span>
+                                                  │
+                                          Classify + Evaluate
+                                                  │
+                              ┌─────────┬─────────┼─────────┐
+                          <span class="allow">Allow</span>      <span class="deny">Deny</span>     <span class="escalate">Escalate</span>
+                              │         │         │
+                           proceed    block    Claude judges
+                                               (via MCP tools)
+</pre>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <h3>Intercept</h3>
+        <p>Claude Code attempts a tool call (Bash, Edit, Write, etc.). The <strong>PreToolUse hook</strong> intercepts it, expands context (script contents, package.json lifecycle hooks, cross-file function bodies), and sends the enriched operation to the MC server.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <h3>Classify</h3>
+        <p>The <strong>kernel</strong> classifies the operation: resource type, destructiveness, data flow direction, pattern matching against known attack vectors.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <h3>Evaluate</h3>
+        <p>The <strong>policy pipeline</strong> evaluates deterministic rules and returns one of three verdicts: <span style="color: var(--green);">Allow</span>, <span style="color: var(--red);">Deny</span>, or <span style="color: var(--orange);">Escalate</span> (where Claude itself acts as the LLM judge).</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">4</div>
+      <div class="step-content">
+        <h3>Record</h3>
+        <p>Every decision is recorded in a <strong>tamper-evident trace</strong> with SHA-256 hash chaining. Anomalies like taint propagation, goal drift, and prompt injection are tracked automatically.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Getting Started -->
+  <h2 class="section-heading">Getting Started</h2>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <h3>Build</h3>
+        <p>Clone the repository and build the Rust binary:</p>
+        <pre><code><span class="kw">cd</span> /path/to/mission-clearance
+cargo build --release</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <h3>Install the plugin</h3>
+        <p>The plugin lives at <code>~/.claude/plugins/local/mission-clearance/</code> and includes the hook script, MCP server, and slash commands. Ensure the <code>mission-clearance</code> binary is on your PATH.</p>
+        <pre><code>~/.claude/plugins/local/mission-clearance/
+  .claude-plugin/plugin.json    <span class="cmt"># Plugin manifest</span>
+  .mcp.json                     <span class="cmt"># MCP server configuration</span>
+  hooks/
+    hooks.json                  <span class="cmt"># Hook registration</span>
+    pre-tool-use.py             <span class="cmt"># PreToolUse hook script</span>
+  commands/
+    start.md, stop.md, ...      <span class="cmt"># Slash commands</span>
+  scripts/
+    mc-mcp-server.py            <span class="cmt"># MCP server (stdio JSON-RPC)</span></code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <h3>Start a session</h3>
+        <p>Launch the MC server, create a root mission, and activate gating:</p>
+        <pre><code>/mission-clearance:start <span class="str">"implement user authentication"</span></code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">4</div>
+      <div class="step-content">
+        <h3>Work normally</h3>
+        <p>All tool calls are now checked automatically. You do not need to do anything differently. The hook runs transparently on every tool call.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Explore docs -->
+  <h2 class="section-heading">Explore the Documentation</h2>
+
+  <div class="cards">
+    <a href="detection.html" class="card">
+      <h3>Detection Capabilities</h3>
+      <p>What gets checked: shell commands, exfiltration, reverse shells, obfuscated code, credential harvesting, and more.</p>
+    </a>
+    <a href="commands.html" class="card">
+      <h3>Commands &amp; MCP Tools</h3>
+      <p>Slash commands for session management and the MCP tools Claude uses during operation.</p>
+    </a>
+    <a href="architecture.html" class="card">
+      <h3>Architecture</h3>
+      <p>Crate map, data flow, policy pipeline, trace system, and vault internals.</p>
+    </a>
+    <a href="configuration.html" class="card">
+      <h3>Configuration</h3>
+      <p>TOML config reference, environment variables, and default policy rules.</p>
+    </a>
+  </div>
+
+</main>
+
+<footer>
+  Mission Clearance &mdash; MIT License &mdash;
+  <a href="https://github.com/nickkopylov/mission-clearance">GitHub</a>
+</footer>
+
+</body>
+</html>

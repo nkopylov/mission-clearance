@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture &mdash; Mission Clearance</title>
+  <meta name="description" content="Architecture deep dive: crate map, data flow, policy pipeline, trace system, and vault internals for Mission Clearance.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">
+      <span class="shield">&#x1f6e1;</span> Mission Clearance
+    </a>
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="detection.html">Detection</a></li>
+      <li><a href="commands.html">Commands</a></li>
+      <li><a href="architecture.html" class="active">Architecture</a></li>
+      <li><a href="configuration.html">Configuration</a></li>
+      <li><a href="https://github.com/nickkopylov/mission-clearance" target="_blank">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main>
+
+  <div class="page-header">
+    <h1>Architecture</h1>
+    <p>Crate map, data flow, policy pipeline, trace system, and vault internals.</p>
+  </div>
+
+  <!-- System overview -->
+  <h2 class="section-heading">System Overview</h2>
+  <p class="section-desc">
+    Mission Clearance is structured as a Rust workspace with focused crates.
+    The plugin layer (Python scripts) handles integration with Claude Code,
+    while the Rust binary provides the kernel, policy engine, trace log, and vault.
+  </p>
+
+  <div class="arch-diagram">
+<pre>
+~/.claude/plugins/local/mission-clearance/
+  hooks/<span style="color: var(--accent)">pre-tool-use.py</span>          &larr; intercepts all Claude Code tool calls
+  scripts/<span style="color: var(--accent)">mc-mcp-server.py</span>       &larr; MCP tools for Claude to manage sessions
+        |
+        v
+<span style="color: var(--cyan)">mission-clearance binary</span> (Rust)
+        |
+  +-----+-----------------------------------+
+  |            <span style="color: var(--accent)">mc-kernel</span>                    |
+  |  classifier . checker . analyzer        |
+  |  session tracker . pipe chains          |
+  +-----+---------+----------+--------------+
+        |         |          |
+   <span style="color: var(--purple)">mc-policy</span>   <span style="color: var(--orange)">mc-vault</span>   <span style="color: var(--green)">mc-trace</span>
+   pipeline    AES-256    SHA-256
+   rules       Argon2id   chained
+        |
+     <span style="color: var(--text-secondary)">mc-core</span>
+     domain types
+</pre>
+  </div>
+
+  <!-- Crate map -->
+  <h2 class="section-heading">Crate Map</h2>
+
+  <div class="crate-map">
+    <div class="crate-item">
+      <h3>mc-core</h3>
+      <p>Domain types: missions, capabilities, operations, policies, resources. The shared vocabulary used by all other crates.</p>
+    </div>
+    <div class="crate-item">
+      <h3>mc-kernel</h3>
+      <p>Classifier, capability checker, content analyzer, and session tracker. The brain that classifies every operation.</p>
+    </div>
+    <div class="crate-item">
+      <h3>mc-policy</h3>
+      <p>Deterministic policy pipeline with escalation support. Evaluates rules and produces Allow, Deny, or Escalate verdicts.</p>
+    </div>
+    <div class="crate-item">
+      <h3>mc-trace</h3>
+      <p>Append-only SHA-256 chained event log and mission delegation graph. Provides tamper-evident audit trails.</p>
+    </div>
+    <div class="crate-item">
+      <h3>mc-vault</h3>
+      <p>AES-256-GCM encrypted credential store with Argon2id key derivation. Secrets never leave the vault unencrypted.</p>
+    </div>
+    <div class="crate-item">
+      <h3>mc-api</h3>
+      <p>Internal HTTP server built with axum. Used by the hook and MCP tools to communicate with the kernel.</p>
+    </div>
+    <div class="crate-item">
+      <h3>mc-sdk</h3>
+      <p>Embedded kernel used internally by the server. Provides a Rust API for kernel operations.</p>
+    </div>
+    <div class="crate-item">
+      <h3>mc-cli</h3>
+      <p>Binary entry point. Runs the server with <code>mission-clearance start</code>. Handles CLI argument parsing and startup.</p>
+    </div>
+  </div>
+
+  <!-- Data flow -->
+  <h2 class="section-heading">Data Flow</h2>
+  <p class="section-desc">
+    Every tool call follows this path from Claude Code to a policy decision.
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <h3>Tool call intercepted</h3>
+        <p>Claude Code triggers a tool call (Bash, Edit, Write, etc.). The PreToolUse hook receives the raw tool name and input parameters.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <h3>Context expansion</h3>
+        <p>The hook enriches the operation: it reads script contents for Bash commands, expands package.json lifecycle hooks for <code>npm install</code>, resolves cross-file function bodies for imports, and expands Makefile targets.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <h3>HTTP request to MC server</h3>
+        <p>The enriched operation is sent to the MC server at <code>127.0.0.1:9090</code> via HTTP POST.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">4</div>
+      <div class="step-content">
+        <h3>Kernel classification</h3>
+        <p>The kernel classifies the operation along multiple dimensions: resource type (file, shell, network, etc.), destructiveness (None through Catastrophic), reversibility, data flow direction, and pattern matching against known attacks.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">5</div>
+      <div class="step-content">
+        <h3>Policy evaluation</h3>
+        <p>The classification feeds into the policy pipeline. Deterministic rules are evaluated in priority order. The first matching rule determines the verdict.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">6</div>
+      <div class="step-content">
+        <h3>Trace recording</h3>
+        <p>The operation, classification, and decision are appended to the SHA-256 chained trace log. Anomalies (taint, drift) are recorded separately.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Policy pipeline -->
+  <h2 class="section-heading">Policy Pipeline</h2>
+  <p class="section-desc">
+    The policy pipeline is a layered evaluation system. The deterministic layer runs
+    in-process and handles clear-cut cases. When it returns "Escalate," the integration
+    layer asks the host LLM (Claude) to judge the operation.
+  </p>
+
+  <div class="pipeline">
+    <div class="pipeline-stage">
+      <h4>Operation</h4>
+      <p>Enriched tool call</p>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-stage">
+      <h4>Classifier</h4>
+      <p>Type, risk, flow</p>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-stage">
+      <h4>Deterministic Rules</h4>
+      <p>Priority-ordered</p>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-stage allow">
+      <h4 style="color: var(--green);">Allow</h4>
+      <p>Proceed normally</p>
+    </div>
+  </div>
+  <div class="pipeline" style="margin-top: -8px;">
+    <div class="pipeline-stage" style="visibility: hidden;"><h4>&nbsp;</h4><p>&nbsp;</p></div>
+    <div class="pipeline-arrow" style="visibility: hidden;">&rarr;</div>
+    <div class="pipeline-stage" style="visibility: hidden;"><h4>&nbsp;</h4><p>&nbsp;</p></div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-stage deny">
+      <h4 style="color: var(--red);">Deny</h4>
+      <p>Block + explain</p>
+    </div>
+  </div>
+  <div class="pipeline" style="margin-top: -8px;">
+    <div class="pipeline-stage" style="visibility: hidden;"><h4>&nbsp;</h4><p>&nbsp;</p></div>
+    <div class="pipeline-arrow" style="visibility: hidden;">&rarr;</div>
+    <div class="pipeline-stage" style="visibility: hidden;"><h4>&nbsp;</h4><p>&nbsp;</p></div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-stage escalate">
+      <h4 style="color: var(--orange);">Escalate</h4>
+      <p>Claude judges</p>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-stage">
+      <h4>LLM Judge</h4>
+      <p>Approve / Deny</p>
+    </div>
+  </div>
+
+  <p style="color: var(--text-secondary); margin-top: 16px; font-size: 14px;">
+    Rules are evaluated in <strong>priority order</strong> (highest first). The first
+    matching rule wins. If no rule matches, the default behavior depends on the
+    <code>fail_closed</code> configuration setting.
+  </p>
+
+  <!-- Trace system -->
+  <h2 class="section-heading">Trace System</h2>
+  <p class="section-desc">
+    The trace system provides a tamper-evident audit log of every operation and decision.
+  </p>
+
+  <div class="cards">
+    <div class="card">
+      <h3>SHA-256 Hash Chaining</h3>
+      <p>
+        Each trace event includes the hash of the previous event, forming a chain.
+        Any modification to a past event breaks the chain, making tampering detectable.
+        Integrity is verified with <code>chain_integrity = true</code>.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Event Types</h3>
+      <p>
+        The trace records: operation submissions, classifications, policy decisions
+        (allow/deny/escalate), escalation outcomes, mission lifecycle events
+        (create/delegate/revoke), and anomaly detections.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Delegation Graph</h3>
+      <p>
+        Missions form a tree via delegation. The trace maintains a graph of
+        parent-child relationships, exportable as DOT format for visualization.
+        Revocation cascades down the tree.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Anomaly Detection</h3>
+      <p>
+        The trace tracks three categories of anomalies: <strong>taint propagation</strong>
+        (write-then-execute chains), <strong>goal drift</strong> (operations unrelated
+        to the mission), and <strong>prompt injection</strong> attempts.
+      </p>
+    </div>
+  </div>
+
+  <!-- Vault system -->
+  <h2 class="section-heading">Vault System</h2>
+  <p class="section-desc">
+    The vault provides encrypted credential storage so that secrets do not need
+    to be stored in plaintext in environment variables or config files.
+  </p>
+
+  <div class="cards" style="grid-template-columns: 1fr 1fr;">
+    <div class="card">
+      <h3>Encryption</h3>
+      <p>
+        Credentials are encrypted with <strong>AES-256-GCM</strong>, an authenticated
+        encryption scheme that provides both confidentiality and integrity. Each
+        credential has a unique nonce.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Key Derivation</h3>
+      <p>
+        The encryption key is derived from a passphrase using <strong>Argon2id</strong>,
+        a memory-hard key derivation function resistant to GPU and ASIC attacks.
+        The passphrase is provided via <code>MC_VAULT_PASSPHRASE</code>.
+      </p>
+    </div>
+  </div>
+
+  <pre><code><span class="cmt"># Vault operations</span>
+/mission-clearance:vault add      <span class="cmt"># Store a credential (encrypted at rest)</span>
+/mission-clearance:vault list     <span class="cmt"># List credentials (metadata only, no secrets)</span>
+/mission-clearance:vault rotate   <span class="cmt"># Update a credential's value</span>
+/mission-clearance:vault revoke   <span class="cmt"># Delete a credential</span></code></pre>
+
+  <!-- Page navigation -->
+  <div class="page-nav">
+    <a href="commands.html">
+      &larr; Commands
+      <span>Slash commands and MCP tools</span>
+    </a>
+    <a href="configuration.html">
+      Configuration &rarr;
+      <span>TOML config and policies</span>
+    </a>
+  </div>
+
+</main>
+
+<footer>
+  Mission Clearance &mdash; MIT License &mdash;
+  <a href="https://github.com/nickkopylov/mission-clearance">GitHub</a>
+</footer>
+
+</body>
+</html>

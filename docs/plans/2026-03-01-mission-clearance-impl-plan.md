@@ -1,3 +1,7 @@
+**Note:** This is an archived design document from the initial implementation. The current architecture positions Mission Clearance as a Claude Code security harness. See the main README.md for current documentation.
+
+---
+
 # Mission Clearance Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.

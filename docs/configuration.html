@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuration &mdash; Mission Clearance</title>
+  <meta name="description" content="TOML configuration reference, environment variables, and default policy rules for Mission Clearance.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">
+      <span class="shield">&#x1f6e1;</span> Mission Clearance
+    </a>
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="detection.html">Detection</a></li>
+      <li><a href="commands.html">Commands</a></li>
+      <li><a href="architecture.html">Architecture</a></li>
+      <li><a href="configuration.html" class="active">Configuration</a></li>
+      <li><a href="https://github.com/nickkopylov/mission-clearance" target="_blank">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main>
+
+  <div class="page-header">
+    <h1>Configuration</h1>
+    <p>TOML config reference, environment variables, and default policies.</p>
+  </div>
+
+  <!-- Config file -->
+  <h2 class="section-heading">Configuration File</h2>
+  <p class="section-desc">
+    Mission Clearance uses a TOML config file (<code>mission-clearance.toml</code>
+    or <code>config/default.toml</code>). All settings have sensible defaults.
+    Override individual values via a local config file or environment variables.
+  </p>
+
+  <!-- Kernel -->
+  <h2 class="section-subheading">Kernel</h2>
+  <div class="config-section">
+    <h3><code>[kernel]</code></h3>
+    <pre><code><span class="cmt"># Maximum depth of mission delegation chains</span>
+<span class="var">max_delegation_depth</span> = <span class="num">10</span>
+
+<span class="cmt"># Default timeout for missions (after which they auto-revoke)</span>
+<span class="var">default_mission_timeout</span> = <span class="str">"2h"</span>
+
+<span class="cmt"># If true, operations that cannot be evaluated (e.g., server error)</span>
+<span class="cmt"># are denied rather than allowed. Recommended for production.</span>
+<span class="var">fail_closed</span> = <span class="kw">true</span></code></pre>
+
+    <div class="table-wrap" style="margin-top: 16px;">
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>max_delegation_depth</code></td>
+            <td>integer</td>
+            <td><code>10</code></td>
+            <td>Maximum depth of nested sub-mission delegations</td>
+          </tr>
+          <tr>
+            <td><code>default_mission_timeout</code></td>
+            <td>duration</td>
+            <td><code>"2h"</code></td>
+            <td>Auto-revoke missions after this duration</td>
+          </tr>
+          <tr>
+            <td><code>fail_closed</code></td>
+            <td>boolean</td>
+            <td><code>true</code></td>
+            <td>Deny operations when evaluation fails (server error, timeout)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- API -->
+  <h2 class="section-subheading">API Server</h2>
+  <div class="config-section">
+    <h3><code>[api]</code></h3>
+    <pre><code><span class="cmt"># Address the internal HTTP server listens on</span>
+<span class="var">listen</span> = <span class="str">"127.0.0.1:9090"</span></code></pre>
+
+    <div class="table-wrap" style="margin-top: 16px;">
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>listen</code></td>
+            <td>string</td>
+            <td><code>"127.0.0.1:9090"</code></td>
+            <td>Bind address for the internal HTTP API server</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Vault -->
+  <h2 class="section-subheading">Vault</h2>
+  <div class="config-section">
+    <h3><code>[vault]</code></h3>
+    <pre><code><span class="cmt"># Path to the encrypted vault database</span>
+<span class="var">path</span> = <span class="str">"~/.mission-clearance/vault.db"</span>
+
+<span class="cmt"># Key derivation source: "passphrase" uses Argon2id</span>
+<span class="var">master_key_source</span> = <span class="str">"passphrase"</span></code></pre>
+
+    <div class="table-wrap" style="margin-top: 16px;">
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>path</code></td>
+            <td>string</td>
+            <td><code>"~/.mission-clearance/vault.db"</code></td>
+            <td>File path for the encrypted credential store</td>
+          </tr>
+          <tr>
+            <td><code>master_key_source</code></td>
+            <td>string</td>
+            <td><code>"passphrase"</code></td>
+            <td>How the master key is derived (<code>"passphrase"</code> = Argon2id from <code>MC_VAULT_PASSPHRASE</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Adapters -->
+  <h2 class="section-subheading">Adapters</h2>
+  <div class="config-section">
+    <h3><code>[adapters.*]</code></h3>
+    <pre><code><span class="cmt"># HTTP adapter — intercepts outbound HTTP requests</span>
+[<span class="var">adapters.http</span>]
+<span class="var">listen</span> = <span class="str">"127.0.0.1:8080"</span>
+<span class="var">tls_inspection</span> = <span class="kw">true</span>
+<span class="var">ca_cert_path</span> = <span class="str">"~/.mission-clearance/ca.pem"</span>
+
+<span class="cmt"># Database adapter — intercepts database connections</span>
+[<span class="var">adapters.db</span>]
+<span class="var">listen</span> = <span class="str">"127.0.0.1:5433"</span>
+<span class="var">upstream_protocol</span> = <span class="str">"postgres"</span>
+
+<span class="cmt"># Shell adapter</span>
+[<span class="var">adapters.shell</span>]
+<span class="var">sandbox</span> = <span class="str">"none"</span>
+
+<span class="cmt"># Tool call adapter</span>
+[<span class="var">adapters.tool_call</span>]
+<span class="var">mode</span> = <span class="str">"wrapper"</span></code></pre>
+  </div>
+
+  <!-- Policy pipeline -->
+  <h2 class="section-subheading">Policy Pipeline</h2>
+  <div class="config-section">
+    <h3><code>[policy_pipeline]</code></h3>
+    <pre><code><span class="cmt"># The deterministic layer runs in-process. When it returns "Escalate",</span>
+<span class="cmt"># the integration layer (e.g., Claude Code hook) asks the host LLM to</span>
+<span class="cmt"># judge the operation — no separate API key or HTTP call is needed.</span>
+<span class="var">layers</span> = [<span class="str">"deterministic"</span>]</code></pre>
+
+    <div class="table-wrap" style="margin-top: 16px;">
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>layers</code></td>
+            <td>array</td>
+            <td><code>["deterministic"]</code></td>
+            <td>Policy evaluation layers. Escalation to LLM is handled by the integration layer (hook), not the pipeline itself.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Trace -->
+  <h2 class="section-subheading">Trace</h2>
+  <div class="config-section">
+    <h3><code>[trace]</code></h3>
+    <pre><code><span class="cmt"># Path to the trace database</span>
+<span class="var">path</span> = <span class="str">"~/.mission-clearance/trace.db"</span>
+
+<span class="cmt"># Verify SHA-256 chain integrity on reads</span>
+<span class="var">chain_integrity</span> = <span class="kw">true</span>
+
+<span class="cmt"># Export format for the mission delegation graph</span>
+<span class="var">graph_export_format</span> = <span class="str">"dot"</span></code></pre>
+
+    <div class="table-wrap" style="margin-top: 16px;">
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>path</code></td>
+            <td>string</td>
+            <td><code>"~/.mission-clearance/trace.db"</code></td>
+            <td>File path for the append-only trace log</td>
+          </tr>
+          <tr>
+            <td><code>chain_integrity</code></td>
+            <td>boolean</td>
+            <td><code>true</code></td>
+            <td>Verify SHA-256 hash chain integrity on reads</td>
+          </tr>
+          <tr>
+            <td><code>graph_export_format</code></td>
+            <td>string</td>
+            <td><code>"dot"</code></td>
+            <td>Format for delegation graph export (DOT/Graphviz)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Operation policies -->
+  <h2 class="section-subheading">Operation Policies</h2>
+  <div class="config-section">
+    <h3><code>[operation_policies]</code></h3>
+    <pre><code><span class="cmt"># Include the built-in default policies</span>
+<span class="var">include</span> = [<span class="str">"defaults"</span>]</code></pre>
+  </div>
+
+  <!-- Environment variables -->
+  <h2 class="section-heading">Environment Variables</h2>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Variable</th><th>Purpose</th><th>Required</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>MC_VAULT_PASSPHRASE</code></td>
+          <td>Passphrase for the AES-256-GCM encrypted vault. Used with Argon2id key derivation to generate the master encryption key.</td>
+          <td>Only if using the vault</td>
+        </tr>
+        <tr>
+          <td><code>MC_API_KEY</code></td>
+          <td>API key for server authentication. If not set, the server runs in open dev mode (no authentication required).</td>
+          <td>No (defaults to open)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Default policies -->
+  <h2 class="section-heading">Default Policies</h2>
+  <p class="section-desc">
+    Built-in deterministic rules are defined in <code>config/default-policies.toml</code>.
+    These policies are evaluated in priority order (highest first) and form the
+    baseline security guarantees. Higher priority rules are evaluated first.
+  </p>
+
+  <div class="detection-list">
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon red">&#x26d4;</span>
+        no-catastrophic-destruction
+      </h3>
+      <p>Deny operations classified as catastrophic and irreversible.</p>
+      <pre><code><span class="var">deny_when</span> = <span class="str">"destructiveness == Catastrophic AND reversibility == Irreversible"</span>
+<span class="var">scope</span>     = <span class="str">"global"</span>
+<span class="var">priority</span>  = <span class="num">100</span></code></pre>
+    </div>
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon red">&#x1f6ab;</span>
+        no-self-modification
+      </h3>
+      <p>Deny operations targeting the permission system itself.</p>
+      <pre><code><span class="var">deny_when</span> = <span class="str">"resource contains 'mission-clearance' OR resource contains 'system-prompt'"</span>
+<span class="var">scope</span>     = <span class="str">"global"</span>
+<span class="var">priority</span>  = <span class="num">95</span></code></pre>
+    </div>
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon red">&#x1f4e4;</span>
+        no-exfiltration
+      </h3>
+      <p>Deny operations suspected of data exfiltration.</p>
+      <pre><code><span class="var">deny_when</span> = <span class="str">"data_flow == ExfiltrationSuspected"</span>
+<span class="var">scope</span>     = <span class="str">"global"</span>
+<span class="var">priority</span>  = <span class="num">90</span></code></pre>
+    </div>
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon red">&#x1f510;</span>
+        no-privilege-escalation
+      </h3>
+      <p>Deny operations matching known malicious patterns.</p>
+      <pre><code><span class="var">deny_when</span> = <span class="str">"pattern == KnownMalicious"</span>
+<span class="var">scope</span>     = <span class="str">"global"</span>
+<span class="var">priority</span>  = <span class="num">85</span></code></pre>
+    </div>
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon orange">&#x1f310;</span>
+        unknown-destination-review
+      </h3>
+      <p>Escalate outbound requests to unknown destinations for human/LLM review.</p>
+      <pre><code><span class="var">escalate_when</span> = <span class="str">"data_flow == Outbound AND target_trust == Unknown"</span>
+<span class="var">scope</span>          = <span class="str">"global"</span>
+<span class="var">priority</span>       = <span class="num">50</span></code></pre>
+    </div>
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon orange">&#x1f9ed;</span>
+        goal-drift-detection
+      </h3>
+      <p>Escalate operations that appear unrelated or contradictory to the mission goal.</p>
+      <pre><code><span class="var">escalate_when</span> = <span class="str">"goal_relevance == Unrelated OR goal_relevance == Contradictory"</span>
+<span class="var">scope</span>          = <span class="str">"global"</span>
+<span class="var">priority</span>       = <span class="num">40</span></code></pre>
+    </div>
+
+  </div>
+
+  <p style="color: var(--text-secondary); margin-top: 24px; font-size: 14px;">
+    Policies with <code>deny_when</code> block the operation immediately. Policies
+    with <code>escalate_when</code> pause the operation and ask Claude (the LLM judge)
+    to review it. Priority determines evaluation order &mdash; the first matching rule wins.
+  </p>
+
+  <!-- Page navigation -->
+  <div class="page-nav">
+    <a href="architecture.html">
+      &larr; Architecture
+      <span>Crate map and internals</span>
+    </a>
+    <a href="index.html">
+      Home &rarr;
+      <span>Overview and getting started</span>
+    </a>
+  </div>
+
+</main>
+
+<footer>
+  Mission Clearance &mdash; MIT License &mdash;
+  <a href="https://github.com/nickkopylov/mission-clearance">GitHub</a>
+</footer>
+
+</body>
+</html>

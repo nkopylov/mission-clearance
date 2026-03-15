@@ -1,7 +1,11 @@
+**Note:** This is an archived design document from the initial implementation. The current architecture positions Mission Clearance as a Claude Code security harness. See the main README.md for current documentation.
+
+---
+
 # Mission Clearance: Design Document
 
 **Date:** 2026-03-01
-**Status:** Approved
+**Status:** Archived
 
 ## Overview
 
