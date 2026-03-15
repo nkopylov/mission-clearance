@@ -1,13 +1,10 @@
 //! Rust SDK for Mission Clearance.
 //!
-//! Provides two modes of operation: an HTTP client that talks to a running
-//! `mc-api` server, and an embedded kernel for in-process usage.
+//! Provides an embedded kernel for in-process usage within the Claude Code plugin.
 
-pub mod client;
 pub mod embedded;
 
 // Re-export key types for convenience.
-pub use client::MissionClearanceClient;
 pub use embedded::EmbeddedKernel;
 
 // Re-export DTO types used by both client and embedded modes.

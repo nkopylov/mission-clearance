@@ -20,9 +20,8 @@ use mc_policy::deterministic::DeterministicEvaluator;
 
 /// In-process kernel for direct access without HTTP.
 ///
-/// Wraps all subsystems in a single struct, providing the same
-/// logical operations as `MissionClearanceClient` but executing
-/// them in-process.
+/// Wraps all subsystems in a single struct, providing typed
+/// access to missions, vault, operations, and tracing.
 pub struct EmbeddedKernel {
     state: Arc<AppState>,
     signal_enricher: Box<dyn SignalEnricher>,
