@@ -20,16 +20,12 @@ name = "mission-clearance"
 path = "src/main.rs"
 
 [dependencies]
-mc-core = { path = "../mc-core" }
 mc-kernel = { path = "../mc-kernel" }
 mc-policy = { path = "../mc-policy" }
 mc-vault = { path = "../mc-vault" }
 mc-trace = { path = "../mc-trace" }
-mc-adapters = { path = "../mc-adapters" }
 mc-api = { path = "../mc-api" }
-mc-sdk = { path = "../mc-sdk" }
 serde.workspace = true
-serde_json.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 clap = { version = "4", features = ["derive"] }
