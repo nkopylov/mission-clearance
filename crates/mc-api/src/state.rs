@@ -14,10 +14,15 @@ pub struct AppState {
     /// Only available when mc-policy is compiled with the `feedback-loop` feature.
     #[cfg(feature = "feedback-loop")]
     pub feedback_loop: Option<mc_policy::feedback::FeedbackLoop>,
+    /// Expected API key for authentication. When `None`, any non-empty key is
+    /// accepted (dev mode) with a warning logged on the first request.
+    pub expected_api_key: Option<String>,
 }
 
 impl AppState {
     /// Create a new `AppState` suitable for testing with in-memory stores.
+    ///
+    /// Uses a hardcoded test passphrase and no expected API key (dev mode).
     pub fn new_for_testing() -> Arc<Self> {
         Arc::new(Self {
             mission_manager: Mutex::new(mc_kernel::manager::MissionManager::new(10)),
@@ -29,6 +34,7 @@ impl AppState {
             policy_pipeline: mc_policy::pipeline::PolicyPipeline::new(),
             #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
+            expected_api_key: None,
         })
     }
 }

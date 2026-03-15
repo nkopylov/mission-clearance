@@ -4,7 +4,7 @@
 use mc_sdk::{CapabilitySpec, EmbeddedKernel, OperationContext};
 
 fn kernel() -> EmbeddedKernel {
-    EmbeddedKernel::new(10).expect("kernel")
+    EmbeddedKernel::new(10, "test-passphrase").expect("kernel")
 }
 
 fn cap(pattern: &str, ops: &[&str]) -> CapabilitySpec {

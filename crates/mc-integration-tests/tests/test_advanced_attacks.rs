@@ -11,7 +11,7 @@ use mc_sdk::{CapabilitySpec, EmbeddedKernel, OperationContext};
 // ---------------------------------------------------------------------------
 
 fn kernel() -> EmbeddedKernel {
-    EmbeddedKernel::new(10).expect("failed to create embedded kernel")
+    EmbeddedKernel::new(10, "test-passphrase").expect("failed to create embedded kernel")
 }
 
 fn cap(pattern: &str, ops: &[&str], delegatable: bool) -> CapabilitySpec {

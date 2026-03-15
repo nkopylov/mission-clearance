@@ -54,6 +54,7 @@ fn kernel_with_llm_deny(reason: &str) -> EmbeddedKernel {
             p
         },
         feedback_loop: None, // We test detection separately
+        expected_api_key: None,
     });
     EmbeddedKernel::with_state(state)
 }
@@ -78,6 +79,7 @@ fn kernel_with_llm_allow() -> EmbeddedKernel {
             p
         },
         feedback_loop: None,
+        expected_api_key: None,
     });
     EmbeddedKernel::with_state(state)
 }
@@ -370,6 +372,7 @@ fn feedback_loop_wired_into_kernel() {
             p
         },
         feedback_loop: Some(FeedbackLoop::new(std::path::PathBuf::from("."))),
+        expected_api_key: None,
     });
     let k = EmbeddedKernel::with_state(state);
 

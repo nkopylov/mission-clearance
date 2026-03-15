@@ -11,7 +11,7 @@ use mc_sdk::{CapabilitySpec, EmbeddedKernel, OperationContext};
 // ---------------------------------------------------------------------------
 
 fn kernel() -> EmbeddedKernel {
-    EmbeddedKernel::new(10).expect("failed to create embedded kernel")
+    EmbeddedKernel::new(10, "test-passphrase").expect("failed to create embedded kernel")
 }
 
 fn cap(pattern: &str, ops: &[&str], delegatable: bool) -> CapabilitySpec {
@@ -375,7 +375,7 @@ fn test_e2e_mission_lifecycle() {
 #[test]
 fn test_e2e_deep_delegation_chain() {
     // 1. Create embedded kernel with max_depth=3
-    let k = EmbeddedKernel::new(3).expect("failed to create kernel with depth 3");
+    let k = EmbeddedKernel::new(3, "test-passphrase").expect("failed to create kernel with depth 3");
 
     // 2. Create root (depth 0) with broad cap (delegatable)
     let root = k
