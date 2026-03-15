@@ -11,6 +11,10 @@ categories.workspace = true
 rust-version.workspace = true
 description = "Rust SDK with HTTP client and embedded kernel for Mission Clearance"
 
+[features]
+default = []
+feedback-loop = ["mc-policy/feedback-loop", "mc-api/feedback-loop"]
+
 [dependencies]
 mc-core = { path = "../mc-core" }
 mc-kernel = { path = "../mc-kernel" }

@@ -116,12 +116,20 @@ pub enum OperationPattern {
     KnownMalicious,
 }
 
+/// How relevant an operation is to the current mission goal.
+///
+/// The `Unknown` variant is the default assigned by the deterministic
+/// classifier when no LLM evaluation is available.  When the LLM judge is
+/// implemented, it will populate this field with one of the other variants
+/// based on semantic analysis of the operation relative to the mission goal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GoalRelevance {
     DirectlyRelevant,
     TangentiallyRelevant,
     Unrelated,
     Contradictory,
+    /// Goal relevance has not been evaluated (e.g. the LLM judge is unavailable).
+    Unknown,
 }
 
 /// Protocol-specific context attached to an operation request.

@@ -21,7 +21,10 @@ impl OperationClassifier {
         let data_flow = Self::classify_data_flow(request);
         let target_trust = Self::classify_target_trust(request);
         let pattern = Self::classify_pattern(request);
-        let goal_relevance = GoalRelevance::DirectlyRelevant; // default, LLM evaluates this
+        // Goal relevance cannot be determined by the deterministic classifier
+        // alone — it requires semantic understanding of the mission goal.
+        // This field is populated by the LLM judge when available.
+        let goal_relevance = GoalRelevance::Unknown;
 
         let signals = Self::extract_signals(request);
 

@@ -4,11 +4,24 @@ use mc_core::policy::{
     EvaluationContext, PolicyDecision, PolicyDecisionKind, PolicyEvaluator, PolicyEvaluatorType,
 };
 
-/// LLM-based policy evaluator.
+/// Placeholder URL for the OpenAI-compatible chat completions endpoint.
 ///
-/// Constructs a prompt with mission context, recent operations, and the
-/// current operation request/classification, then queries an LLM for a
-/// policy decision.
+/// This constant exists so the default is visible and easy to override via
+/// [`LlmJudge::with_api_url`].  When the LLM judge is actually implemented,
+/// this should be read from the application configuration instead of being
+/// hardcoded.
+const DEFAULT_LLM_API_URL: &str = "https://api.openai.com/v1/chat/completions";
+
+/// LLM-based policy evaluator (**not yet implemented**).
+///
+/// This evaluator is a planned feature for v0.2+.  The prompt construction
+/// logic ([`LlmJudge::build_prompt`]) is fully implemented and tested, but
+/// the actual HTTP call to an LLM API is **not wired up**.  As a result,
+/// [`PolicyEvaluator::evaluate`] always returns [`PolicyDecisionKind::Deny`]
+/// (fail-closed behaviour) so that enabling the judge in a pipeline does not
+/// silently skip LLM review.
+///
+/// Use [`MockLlmJudge`] for testing pipelines that include an LLM evaluator.
 pub struct LlmJudge {
     api_key: String,
     model: String,
@@ -17,17 +30,33 @@ pub struct LlmJudge {
 
 impl LlmJudge {
     /// Create a new LLM judge with the given API key and model.
-    /// Uses the OpenAI-compatible API endpoint by default.
+    ///
+    /// Uses [`DEFAULT_LLM_API_URL`] as the API endpoint.
+    ///
+    /// **Note:** The LLM judge is not yet implemented.  `evaluate()` will
+    /// always return `Deny` (fail-closed).
     pub fn new(api_key: String, model: String) -> Self {
+        tracing::info!(
+            model = %model,
+            "LLM judge is not yet implemented; evaluate() will fail closed (Deny)"
+        );
         Self {
             api_key,
             model,
-            api_url: "https://api.openai.com/v1/chat/completions".to_string(),
+            api_url: DEFAULT_LLM_API_URL.to_string(),
         }
     }
 
     /// Create a new LLM judge with a custom API URL.
+    ///
+    /// **Note:** The LLM judge is not yet implemented.  `evaluate()` will
+    /// always return `Deny` (fail-closed).
     pub fn with_api_url(api_key: String, model: String, api_url: String) -> Self {
+        tracing::info!(
+            model = %model,
+            api_url = %api_url,
+            "LLM judge is not yet implemented; evaluate() will fail closed (Deny)"
+        );
         Self {
             api_key,
             model,
@@ -190,6 +219,12 @@ impl LlmJudge {
 }
 
 impl PolicyEvaluator for LlmJudge {
+    /// Evaluate a policy decision using the LLM.
+    ///
+    /// **Not yet implemented.** Always returns [`PolicyDecisionKind::Deny`]
+    /// (fail-closed) because the HTTP call to the LLM API has not been wired
+    /// up.  The prompt *is* constructed (via [`Self::build_prompt`]) so that
+    /// it can be inspected in traces.
     fn evaluate(
         &self,
         request: &OperationRequest,
@@ -198,20 +233,19 @@ impl PolicyEvaluator for LlmJudge {
     ) -> PolicyDecision {
         let _prompt = Self::build_prompt(request, classification, context);
 
-        // In a real implementation, we would send the prompt to the LLM API
-        // using self.api_key, self.model, and self.api_url.
-        // For now, we fail closed: if the LLM cannot be reached, deny.
-        tracing::warn!(
+        // The LLM HTTP call is not yet implemented.  This is expected
+        // behaviour — log at info level, not warn.
+        tracing::info!(
             model = %self.model,
             api_url = %self.api_url,
             has_api_key = !self.api_key.is_empty(),
-            "LLM judge called but synchronous HTTP not implemented; failing closed"
+            "LLM judge not yet implemented; failing closed"
         );
 
         PolicyDecision {
             policy_id: PolicyId::new(),
             kind: PolicyDecisionKind::Deny,
-            reasoning: "LLM judge unavailable (sync implementation); failing closed".to_string(),
+            reasoning: "LLM judge not yet implemented; failing closed".to_string(),
             evaluator: PolicyEvaluatorType::Llm,
         }
     }

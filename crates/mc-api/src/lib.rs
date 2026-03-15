@@ -367,6 +367,7 @@ mod tests {
                 pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
                 pipeline
             },
+            #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
         });
 
@@ -475,6 +476,7 @@ mod tests {
                 pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
                 pipeline
             },
+            #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
         });
 
@@ -697,6 +699,7 @@ mod tests {
                 pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
                 pipeline
             },
+            #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
         });
 

@@ -1,3 +1,18 @@
+//! Adaptive feedback loop for automatic pattern learning.
+//!
+//! # WARNING — Development-only feature
+//!
+//! This module is gated behind the `feedback-loop` Cargo feature (disabled by
+//! default).  When active it:
+//!
+//! 1. Spawns `claude --dangerously-skip-permissions` as a child process to
+//!    rewrite source-code pattern lists.
+//! 2. Runs `cargo build` and then `exec()`s into the rebuilt binary,
+//!    **replacing the running process**.
+//!
+//! **Never enable `feedback-loop` in production, CI, or any environment where
+//! untrusted input could influence the disagreement prompt.**
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,6 +27,11 @@ use crate::pipeline::EvaluatorTrace;
 /// Detects disagreements between evaluators and spawns a sub-agent to
 /// update the source code pattern lists so the deterministic filter
 /// handles the case correctly next time.
+///
+/// # Safety
+///
+/// See the [module-level documentation](self) for important warnings about the
+/// risks of enabling this feature.
 pub struct FeedbackLoop {
     project_root: PathBuf,
     agent_running: Arc<AtomicBool>,

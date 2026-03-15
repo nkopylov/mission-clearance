@@ -11,6 +11,10 @@ categories.workspace = true
 rust-version.workspace = true
 description = "CLI for Mission Clearance autonomous agent permission system"
 
+[features]
+default = []
+feedback-loop = ["mc-policy/feedback-loop", "mc-api/feedback-loop"]
+
 [[bin]]
 name = "mission-clearance"
 path = "src/main.rs"

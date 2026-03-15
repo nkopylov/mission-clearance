@@ -13,6 +13,10 @@ description = "Integration tests for Mission Clearance"
 # This crate exists solely for integration tests.
 # It has no library or binary targets.
 
+[features]
+default = []
+feedback-loop = ["mc-policy/feedback-loop", "mc-sdk/feedback-loop", "mc-api/feedback-loop"]
+
 [dev-dependencies]
 mc-sdk = { path = "../mc-sdk" }
 mc-core = { path = "../mc-core" }
