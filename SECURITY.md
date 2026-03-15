@@ -1,8 +1,8 @@
 # Security Policy
 
-Mission Clearance is a security-focused project that manages permissions for
-autonomous AI agents. We take vulnerability reports seriously and appreciate
-responsible disclosure.
+Mission Clearance is a security harness for Claude Code that intercepts and
+evaluates every tool call against capability-scoped policies. We take
+vulnerability reports seriously and appreciate responsible disclosure.
 
 ## Supported Versions
 
@@ -50,17 +50,17 @@ The following areas are especially security-sensitive:
   to modify or delete events without detection is critical.
 - **mc-core** -- Resource pattern matching. Any pattern that matches more
   broadly than intended could escalate privileges.
-- **mc-adapters** -- Protocol normalization. Any request that is normalized
-  incorrectly could bypass policy checks.
 - **mc-api** -- Authentication and authorization. Any unauthenticated access to
   protected endpoints is high severity.
+- **hooks/pre-tool-use.py** -- Hook logic that gates tool calls. Any bypass of
+  the hook or incorrect context expansion is high severity.
 
 ## Out of Scope
 
 - Denial-of-service attacks against the local API server (it is intended to run
   as a local sidecar, not exposed to the internet).
 - Issues in development dependencies or test-only code that do not affect the
-  published crates.
+  plugin or its runtime components.
 
 ## Recognition
 
