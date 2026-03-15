@@ -1,3 +1,8 @@
+//! CLI binary for the Mission Clearance autonomous agent permission system.
+//!
+//! Provides commands for starting the API server, managing the credential vault,
+//! creating and inspecting missions, querying the trace log, and listing policies.
+
 use std::sync::Arc;
 
 use anyhow::{Context, Result};

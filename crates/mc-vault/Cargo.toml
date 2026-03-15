@@ -2,6 +2,14 @@
 name = "mc-vault"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+description = "AES-256-GCM encrypted credential vault for Mission Clearance"
 
 [dependencies]
 mc-core = { path = "../mc-core" }

@@ -6,6 +6,13 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+repository = "https://github.com/nickkopylov/mission-clearance"
+homepage = "https://github.com/nickkopylov/mission-clearance"
+authors = ["Mission Clearance Contributors"]
+keywords = ["ai-safety", "permissions", "capabilities", "agent", "security"]
+categories = ["authentication", "command-line-utilities"]
+readme = "README.md"
+rust-version = "1.85"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

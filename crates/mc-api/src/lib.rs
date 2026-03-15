@@ -1,3 +1,8 @@
+//! HTTP API server for Mission Clearance.
+//!
+//! Provides REST endpoints for mission management, operation submission,
+//! vault administration, policy inspection, and trace querying via axum.
+
 pub mod auth;
 pub mod routes;
 pub mod state;

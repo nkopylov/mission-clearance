@@ -1,3 +1,8 @@
+//! Protocol adapters for HTTP, SQL, shell, and tool-call traffic.
+//!
+//! Each adapter normalizes protocol-specific requests into the unified
+//! [`mc_core::operation::OperationRequest`] model that the kernel evaluates.
+
 use anyhow::Result;
 use async_trait::async_trait;
 use mc_core::id::MissionToken;

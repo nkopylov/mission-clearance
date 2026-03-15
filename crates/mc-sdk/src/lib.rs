@@ -1,3 +1,8 @@
+//! Rust SDK for Mission Clearance.
+//!
+//! Provides two modes of operation: an HTTP client that talks to a running
+//! `mc-api` server, and an embedded kernel for in-process usage.
+
 pub mod client;
 pub mod embedded;
 
