@@ -131,19 +131,21 @@ async fn create_mission(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut mgr = state.mission_manager.lock().unwrap();
+    let mut mgr = state.mission_manager.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "mission manager lock poisoned".to_string()))?;
     let mission = mgr
         .create_root_mission(body.goal, capabilities, policies)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Log the event.
     if let Ok(log) = state.event_log.lock() {
-        let _ = log.append(
+        if let Err(e) = log.append(
             mission.id,
             mc_core::trace::TraceEventType::MissionCreated,
             None,
             serde_json::json!({"goal": &mission.goal}),
-        );
+        ) {
+            tracing::error!("Failed to append trace event: {e}");
+        }
     }
 
     Ok(Json(mission_to_response(&mission)))
@@ -157,7 +159,7 @@ async fn get_mission(
         .map(mc_core::id::MissionId::from_uuid)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    let mgr = state.mission_manager.lock().unwrap();
+    let mgr = state.mission_manager.lock().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mission = mgr.get(&mission_id).ok_or(StatusCode::NOT_FOUND)?;
 
     Ok(Json(mission_to_response(mission)))
@@ -171,7 +173,7 @@ async fn revoke_mission(
         .map(mc_core::id::MissionId::from_uuid)
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid mission id".to_string()))?;
 
-    let mut mgr = state.mission_manager.lock().unwrap();
+    let mut mgr = state.mission_manager.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "mission manager lock poisoned".to_string()))?;
     let revoked = mgr
         .revoke(mission_id)
         .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
@@ -179,12 +181,14 @@ async fn revoke_mission(
     // Log revocation events.
     if let Ok(log) = state.event_log.lock() {
         for mid in &revoked {
-            let _ = log.append(
+            if let Err(e) = log.append(
                 *mid,
                 mc_core::trace::TraceEventType::MissionRevoked,
                 None,
                 serde_json::json!({"revoked_by": id}),
-            );
+            ) {
+                tracing::error!("Failed to append trace event: {e}");
+            }
         }
     }
 
@@ -218,19 +222,21 @@ async fn delegate_mission(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut mgr = state.mission_manager.lock().unwrap();
+    let mut mgr = state.mission_manager.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "mission manager lock poisoned".to_string()))?;
     let child = mgr
         .delegate(parent_id, body.goal, capabilities, policies)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
     // Log delegation event.
     if let Ok(log) = state.event_log.lock() {
-        let _ = log.append(
+        if let Err(e) = log.append(
             child.id,
             mc_core::trace::TraceEventType::MissionDelegated,
             None,
             serde_json::json!({"parent": id, "goal": &child.goal}),
-        );
+        ) {
+            tracing::error!("Failed to append trace event: {e}");
+        }
     }
 
     Ok(Json(mission_to_response(&child)))
@@ -244,7 +250,7 @@ async fn get_mission_tree(
         .map(mc_core::id::MissionId::from_uuid)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    let mgr = state.mission_manager.lock().unwrap();
+    let mgr = state.mission_manager.lock().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mission = mgr.get(&mission_id).ok_or(StatusCode::NOT_FOUND)?;
 
     let tree = build_tree(&mgr, mission);

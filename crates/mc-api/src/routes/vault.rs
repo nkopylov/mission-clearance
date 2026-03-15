@@ -81,7 +81,7 @@ async fn add_entry(
         })
         .collect::<Result<_, _>>()?;
 
-    let vault = state.vault.lock().unwrap();
+    let vault = state.vault.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "vault lock poisoned".to_string()))?;
     let id = vault
         .add(&body.name, secret_type, &body.value, bound_to)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -92,7 +92,7 @@ async fn add_entry(
 async fn list_entries(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let vault = state.vault.lock().unwrap();
+    let vault = state.vault.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "vault lock poisoned".to_string()))?;
     let entries = vault
         .list()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -120,7 +120,7 @@ async fn rotate_entry(
         .map(mc_core::id::VaultEntryId::from_uuid)
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid vault entry id".to_string()))?;
 
-    let vault = state.vault.lock().unwrap();
+    let vault = state.vault.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "vault lock poisoned".to_string()))?;
     vault
         .rotate(&entry_id, &body.new_value)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -136,7 +136,7 @@ async fn revoke_entry(
         .map(mc_core::id::VaultEntryId::from_uuid)
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid vault entry id".to_string()))?;
 
-    let vault = state.vault.lock().unwrap();
+    let vault = state.vault.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "vault lock poisoned".to_string()))?;
     vault
         .revoke(&entry_id)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
