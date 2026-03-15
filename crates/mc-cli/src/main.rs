@@ -291,7 +291,7 @@ fn cmd_vault(command: VaultCommands, config: Config) -> Result<()> {
                 .map(mc_core::id::VaultEntryId::from_uuid)
                 .context("invalid vault entry ID")?;
 
-            let vault = kernel.state().vault.lock().unwrap();
+            let vault = kernel.state().vault.lock().map_err(|e| anyhow::anyhow!("vault lock poisoned: {e}"))?;
             vault.rotate(&entry_id, &value)?;
             println!("Rotated credential: {name}");
         }
@@ -306,7 +306,7 @@ fn cmd_vault(command: VaultCommands, config: Config) -> Result<()> {
                 .map(mc_core::id::VaultEntryId::from_uuid)
                 .context("invalid vault entry ID")?;
 
-            let vault = kernel.state().vault.lock().unwrap();
+            let vault = kernel.state().vault.lock().map_err(|e| anyhow::anyhow!("vault lock poisoned: {e}"))?;
             vault.revoke(&entry_id)?;
             println!("Revoked credential: {name}");
         }
@@ -367,7 +367,7 @@ fn cmd_trace(command: TraceCommands, config: Config) -> Result<()> {
                 .map(mc_core::id::MissionId::from_uuid)
                 .context("invalid mission ID")?;
 
-            let log = kernel.state().event_log.lock().unwrap();
+            let log = kernel.state().event_log.lock().map_err(|e| anyhow::anyhow!("event log lock poisoned: {e}"))?;
             let events = log.get_events_for_mission(mid)?;
 
             if events.is_empty() {
@@ -386,7 +386,7 @@ fn cmd_trace(command: TraceCommands, config: Config) -> Result<()> {
             mission_id: _,
             format,
         } => {
-            let graph = kernel.state().graph.lock().unwrap();
+            let graph = kernel.state().graph.lock().map_err(|e| anyhow::anyhow!("graph lock poisoned: {e}"))?;
             let fmt = match format.as_str() {
                 "dot" => mc_core::trace::GraphFormat::Dot,
                 "json" => mc_core::trace::GraphFormat::Json,
@@ -396,7 +396,7 @@ fn cmd_trace(command: TraceCommands, config: Config) -> Result<()> {
             println!("{output}");
         }
         TraceCommands::Denials => {
-            let log = kernel.state().event_log.lock().unwrap();
+            let log = kernel.state().event_log.lock().map_err(|e| anyhow::anyhow!("event log lock poisoned: {e}"))?;
             let events = log.get_recent(100)?;
             let denials: Vec<_> = events
                 .into_iter()
@@ -415,7 +415,7 @@ fn cmd_trace(command: TraceCommands, config: Config) -> Result<()> {
             }
         }
         TraceCommands::Anomalies => {
-            let log = kernel.state().event_log.lock().unwrap();
+            let log = kernel.state().event_log.lock().map_err(|e| anyhow::anyhow!("event log lock poisoned: {e}"))?;
             let events = log.get_recent(200)?;
             let anomaly_types = [
                 mc_core::trace::TraceEventType::TaintDetected,

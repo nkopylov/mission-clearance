@@ -1,5 +1,18 @@
 use std::collections::HashSet;
+use std::fmt;
 use std::sync::{Arc, Mutex};
+
+/// Error type for session tracker operations.
+#[derive(Debug)]
+pub struct SessionTrackerError(String);
+
+impl fmt::Display for SessionTrackerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for SessionTrackerError {}
 
 /// Tracks files written during the current session.
 ///
@@ -20,25 +33,26 @@ impl SessionTracker {
     }
 
     /// Record that a file was written in this session.
-    pub fn record_write(&self, path: &str) {
+    pub fn record_write(&self, path: &str) -> Result<(), SessionTrackerError> {
         let normalized = Self::normalize_path(path);
-        let mut files = self.written_files.lock().unwrap();
+        let mut files = self.written_files.lock().map_err(|e| SessionTrackerError(format!("written_files lock poisoned: {e}")))?;
         files.insert(normalized);
+        Ok(())
     }
 
     /// Check if a file was written in this session (for execute-after-write detection).
-    pub fn was_written_in_session(&self, path: &str) -> bool {
+    pub fn was_written_in_session(&self, path: &str) -> Result<bool, SessionTrackerError> {
         let normalized = Self::normalize_path(path);
-        let files = self.written_files.lock().unwrap();
-        files.contains(&normalized)
+        let files = self.written_files.lock().map_err(|e| SessionTrackerError(format!("written_files lock poisoned: {e}")))?;
+        Ok(files.contains(&normalized))
     }
 
     /// Check if any of the given paths were written in this session.
-    pub fn any_written_in_session(&self, paths: &[&str]) -> bool {
-        let files = self.written_files.lock().unwrap();
-        paths
+    pub fn any_written_in_session(&self, paths: &[&str]) -> Result<bool, SessionTrackerError> {
+        let files = self.written_files.lock().map_err(|e| SessionTrackerError(format!("written_files lock poisoned: {e}")))?;
+        Ok(paths
             .iter()
-            .any(|p| files.contains(&Self::normalize_path(p)))
+            .any(|p| files.contains(&Self::normalize_path(p))))
     }
 
     /// Extract file paths referenced in a shell command.
@@ -103,9 +117,10 @@ impl SessionTracker {
     }
 
     /// Clear all tracked files (e.g., on session reset).
-    pub fn clear(&self) {
-        let mut files = self.written_files.lock().unwrap();
+    pub fn clear(&self) -> Result<(), SessionTrackerError> {
+        let mut files = self.written_files.lock().map_err(|e| SessionTrackerError(format!("written_files lock poisoned: {e}")))?;
         files.clear();
+        Ok(())
     }
 }
 
@@ -123,26 +138,26 @@ mod tests {
     fn track_write_then_detect_execute() {
         let tracker = SessionTracker::new();
 
-        tracker.record_write("/tmp/script.sh");
-        assert!(tracker.was_written_in_session("/tmp/script.sh"));
-        assert!(!tracker.was_written_in_session("/tmp/other.sh"));
+        tracker.record_write("/tmp/script.sh").unwrap();
+        assert!(tracker.was_written_in_session("/tmp/script.sh").unwrap());
+        assert!(!tracker.was_written_in_session("/tmp/other.sh").unwrap());
     }
 
     #[test]
     fn track_file_uri_write() {
         let tracker = SessionTracker::new();
 
-        tracker.record_write("file:///tmp/evil.sh");
-        assert!(tracker.was_written_in_session("/tmp/evil.sh"));
+        tracker.record_write("file:///tmp/evil.sh").unwrap();
+        assert!(tracker.was_written_in_session("/tmp/evil.sh").unwrap());
     }
 
     #[test]
     fn any_written_checks_multiple() {
         let tracker = SessionTracker::new();
 
-        tracker.record_write("/tmp/a.sh");
-        assert!(tracker.any_written_in_session(&["/tmp/b.sh", "/tmp/a.sh"]));
-        assert!(!tracker.any_written_in_session(&["/tmp/b.sh", "/tmp/c.sh"]));
+        tracker.record_write("/tmp/a.sh").unwrap();
+        assert!(tracker.any_written_in_session(&["/tmp/b.sh", "/tmp/a.sh"]).unwrap());
+        assert!(!tracker.any_written_in_session(&["/tmp/b.sh", "/tmp/c.sh"]).unwrap());
     }
 
     #[test]
@@ -166,8 +181,8 @@ mod tests {
     #[test]
     fn clear_resets_tracker() {
         let tracker = SessionTracker::new();
-        tracker.record_write("/tmp/script.sh");
-        tracker.clear();
-        assert!(!tracker.was_written_in_session("/tmp/script.sh"));
+        tracker.record_write("/tmp/script.sh").unwrap();
+        tracker.clear().unwrap();
+        assert!(!tracker.was_written_in_session("/tmp/script.sh").unwrap());
     }
 }

@@ -101,19 +101,21 @@ impl EmbeddedKernel {
 
         let policy_ids = parse_policy_ids(&policies)?;
 
-        let mut mgr = self.state.mission_manager.lock().unwrap();
+        let mut mgr = self.state.mission_manager.lock().map_err(|e| anyhow::anyhow!("mission manager lock poisoned: {e}"))?;
         let mission = mgr
             .create_root_mission(goal.to_string(), caps, policy_ids)
             .context("failed to create root mission")?;
 
         // Log the event.
         if let Ok(log) = self.state.event_log.lock() {
-            let _ = log.append(
+            if let Err(e) = log.append(
                 mission.id,
                 TraceEventType::MissionCreated,
                 None,
                 serde_json::json!({"goal": &mission.goal}),
-            );
+            ) {
+                tracing::error!("Failed to append trace event: {e}");
+            }
         }
 
         Ok(mission_to_response(&mission))
@@ -125,7 +127,7 @@ impl EmbeddedKernel {
             .map(mc_core::id::MissionId::from_uuid)
             .context("invalid mission ID")?;
 
-        let mgr = self.state.mission_manager.lock().unwrap();
+        let mgr = self.state.mission_manager.lock().map_err(|e| anyhow::anyhow!("mission manager lock poisoned: {e}"))?;
         let mission = mgr
             .get(&mission_id)
             .context("mission not found")?;
@@ -152,19 +154,21 @@ impl EmbeddedKernel {
 
         let policy_ids = parse_policy_ids(&policies)?;
 
-        let mut mgr = self.state.mission_manager.lock().unwrap();
+        let mut mgr = self.state.mission_manager.lock().map_err(|e| anyhow::anyhow!("mission manager lock poisoned: {e}"))?;
         let child = mgr
             .delegate(parent_mission_id, goal.to_string(), caps, policy_ids)
             .context("failed to delegate mission")?;
 
         // Log delegation event.
         if let Ok(log) = self.state.event_log.lock() {
-            let _ = log.append(
+            if let Err(e) = log.append(
                 child.id,
                 TraceEventType::MissionDelegated,
                 None,
                 serde_json::json!({"parent": parent_id, "goal": &child.goal}),
-            );
+            ) {
+                tracing::error!("Failed to append trace event: {e}");
+            }
         }
 
         Ok(mission_to_response(&child))
@@ -176,7 +180,7 @@ impl EmbeddedKernel {
             .map(mc_core::id::MissionId::from_uuid)
             .context("invalid mission ID")?;
 
-        let mut mgr = self.state.mission_manager.lock().unwrap();
+        let mut mgr = self.state.mission_manager.lock().map_err(|e| anyhow::anyhow!("mission manager lock poisoned: {e}"))?;
         let revoked = mgr
             .revoke(mission_id)
             .context("failed to revoke mission")?;
@@ -184,12 +188,14 @@ impl EmbeddedKernel {
         // Log revocation events.
         if let Ok(log) = self.state.event_log.lock() {
             for mid in &revoked {
-                let _ = log.append(
+                if let Err(e) = log.append(
                     *mid,
                     TraceEventType::MissionRevoked,
                     None,
                     serde_json::json!({"revoked_by": id}),
-                );
+                ) {
+                    tracing::error!("Failed to append trace event: {e}");
+                }
             }
         }
 
@@ -213,7 +219,7 @@ impl EmbeddedKernel {
             .map(|s| ResourcePattern::new(s).context("invalid resource pattern"))
             .collect::<Result<_>>()?;
 
-        let vault = self.state.vault.lock().unwrap();
+        let vault = self.state.vault.lock().map_err(|e| anyhow::anyhow!("vault lock poisoned: {e}"))?;
         let id = vault
             .add(name, st, value, bound_to)
             .context("failed to add vault entry")?;
@@ -223,7 +229,7 @@ impl EmbeddedKernel {
 
     /// List all vault entries (metadata only).
     pub fn vault_list(&self) -> Result<Vec<VaultEntryResponse>> {
-        let vault = self.state.vault.lock().unwrap();
+        let vault = self.state.vault.lock().map_err(|e| anyhow::anyhow!("vault lock poisoned: {e}"))?;
         let entries = vault
             .list()
             .context("failed to list vault entries")?;
@@ -248,7 +254,7 @@ impl EmbeddedKernel {
             .map(mc_core::id::VaultEntryId::from_uuid)
             .context("invalid vault entry ID")?;
 
-        let vault = self.state.vault.lock().unwrap();
+        let vault = self.state.vault.lock().map_err(|e| anyhow::anyhow!("vault lock poisoned: {e}"))?;
         vault
             .rotate(&uuid, new_value)
             .context("failed to rotate vault entry")
@@ -260,7 +266,7 @@ impl EmbeddedKernel {
             .map(mc_core::id::VaultEntryId::from_uuid)
             .context("invalid vault entry ID")?;
 
-        let vault = self.state.vault.lock().unwrap();
+        let vault = self.state.vault.lock().map_err(|e| anyhow::anyhow!("vault lock poisoned: {e}"))?;
         vault
             .revoke(&uuid)
             .context("failed to revoke vault entry")
@@ -287,7 +293,7 @@ impl EmbeddedKernel {
             .context("invalid resource URI")?;
 
         // Resolve the token and check the mission.
-        let mgr = self.state.mission_manager.lock().unwrap();
+        let mgr = self.state.mission_manager.lock().map_err(|e| anyhow::anyhow!("mission manager lock poisoned: {e}"))?;
         let mission_id = mgr
             .resolve_token(&token)
             .context("unknown mission token")?;
@@ -313,7 +319,7 @@ impl EmbeddedKernel {
         if has_capability.is_none() {
             // Log denied event.
             if let Ok(log) = self.state.event_log.lock() {
-                let _ = log.append(
+                if let Err(e) = log.append(
                     mission_id,
                     TraceEventType::OperationDenied,
                     None,
@@ -322,7 +328,9 @@ impl EmbeddedKernel {
                         "operation": operation,
                         "reason": "no matching capability"
                     }),
-                );
+                ) {
+                    tracing::error!("Failed to append trace event: {e}");
+                }
             }
 
             return Ok(OperationDecisionResponse {
@@ -386,7 +394,7 @@ impl EmbeddedKernel {
         };
 
         if let Ok(log) = self.state.event_log.lock() {
-            let _ = log.append(
+            if let Err(e) = log.append(
                 mission_id,
                 event_type,
                 None,
@@ -396,7 +404,9 @@ impl EmbeddedKernel {
                     "decision": format!("{:?}", decision.kind),
                     "reasoning": &decision.reasoning,
                 }),
-            );
+            ) {
+                tracing::error!("Failed to append trace event: {e}");
+            }
         }
 
         let decision_str = match decision.kind {
@@ -432,7 +442,7 @@ impl EmbeddedKernel {
         let resource_uri = ResourceUri::new(resource)
             .context("invalid resource URI")?;
 
-        let mgr = self.state.mission_manager.lock().unwrap();
+        let mgr = self.state.mission_manager.lock().map_err(|e| anyhow::anyhow!("mission manager lock poisoned: {e}"))?;
         let mission_id = mgr
             .resolve_token(&token)
             .context("unknown mission token")?;

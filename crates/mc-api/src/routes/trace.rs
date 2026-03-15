@@ -40,7 +40,7 @@ async fn query_events(
     State(state): State<Arc<AppState>>,
     Query(params): Query<EventsQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let log = state.event_log.lock().unwrap();
+    let log = state.event_log.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "event log lock poisoned".to_string()))?;
 
     let events = if let Some(mission_id_str) = &params.mission {
         let mission_id = uuid::Uuid::parse_str(mission_id_str)
@@ -77,7 +77,7 @@ async fn export_graph(
     State(state): State<Arc<AppState>>,
     Query(params): Query<GraphQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let graph = state.graph.lock().unwrap();
+    let graph = state.graph.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "graph lock poisoned".to_string()))?;
 
     let format = match params.format.as_deref() {
         Some("dot") | None => GraphFormat::Dot,
@@ -100,7 +100,7 @@ async fn export_graph(
 async fn recent_anomalies(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let log = state.event_log.lock().unwrap();
+    let log = state.event_log.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "event log lock poisoned".to_string()))?;
 
     // Get recent events and filter for anomaly types.
     let events = log

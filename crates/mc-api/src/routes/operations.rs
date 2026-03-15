@@ -166,7 +166,7 @@ async fn submit_operation(
     let token = MissionToken::from_uuid(token_uuid);
 
     // Resolve the token to a mission.
-    let mgr = state.mission_manager.lock().unwrap();
+    let mgr = state.mission_manager.lock().map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "mission manager lock poisoned".to_string()))?;
     let mission_id = mgr
         .resolve_token(&token)
         .ok_or((StatusCode::UNAUTHORIZED, "unknown mission token".to_string()))?;
@@ -199,7 +199,7 @@ async fn submit_operation(
     if has_capability.is_none() {
         // Log denied event.
         if let Ok(log) = state.event_log.lock() {
-            let _ = log.append(
+            if let Err(e) = log.append(
                 mission_id,
                 TraceEventType::OperationDenied,
                 None,
@@ -208,7 +208,9 @@ async fn submit_operation(
                     "operation": body.operation,
                     "reason": "no matching capability"
                 }),
-            );
+            ) {
+                tracing::error!("Failed to append trace event: {e}");
+            }
         }
 
         return Ok(Json(OperationDecisionResponse {
@@ -273,7 +275,7 @@ async fn submit_operation(
     };
 
     if let Ok(log) = state.event_log.lock() {
-        let _ = log.append(
+        if let Err(e) = log.append(
             mission_id,
             event_type,
             None,
@@ -283,7 +285,9 @@ async fn submit_operation(
                 "decision": format!("{:?}", decision.kind),
                 "reasoning": &decision.reasoning,
             }),
-        );
+        ) {
+            tracing::error!("Failed to append trace event: {e}");
+        }
     }
 
     let decision_str = match decision.kind {
