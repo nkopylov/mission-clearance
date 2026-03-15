@@ -59,70 +59,6 @@ impl PolicyEvaluator for MockHuman {
     }
 }
 
-/// Terminal-based human-in-the-loop evaluator (**not yet implemented**).
-///
-/// This evaluator is a planned feature for v0.2+.  In a real deployment it
-/// would display operation details to a terminal (or external review UI) and
-/// block until the human operator approves, denies, or escalates.
-///
-/// The current implementation always returns [`PolicyDecisionKind::Deny`]
-/// (fail-closed) because interactive I/O is not wired up.  Use
-/// [`MockHuman`] for testing pipelines that include a human evaluator.
-pub struct TerminalHuman;
-
-impl TerminalHuman {
-    /// Create a new `TerminalHuman` evaluator.
-    ///
-    /// **Note:** Human review is not yet implemented.  `evaluate()` will
-    /// always return `Deny` (fail-closed).
-    pub fn new() -> Self {
-        tracing::info!(
-            "Human review evaluator is not yet implemented; evaluate() will fail closed (Deny)"
-        );
-        Self
-    }
-}
-
-impl Default for TerminalHuman {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PolicyEvaluator for TerminalHuman {
-    /// Evaluate a policy decision via human review.
-    ///
-    /// **Not yet implemented.** Always returns [`PolicyDecisionKind::Deny`]
-    /// (fail-closed) because interactive terminal I/O is not wired up.
-    fn evaluate(
-        &self,
-        request: &OperationRequest,
-        classification: &OperationClassification,
-        context: &EvaluationContext,
-    ) -> PolicyDecision {
-        // Human review is not yet implemented — log at info level since
-        // this is expected behaviour, not an unexpected failure.
-        tracing::info!(
-            resource = %request.resource,
-            operation = ?request.operation,
-            destructiveness = ?classification.destructiveness,
-            mission_goal = %context.mission_goal,
-            "Human review not yet implemented; failing closed"
-        );
-
-        PolicyDecision {
-            policy_id: PolicyId::new(),
-            kind: PolicyDecisionKind::Deny,
-            reasoning: "Human review not yet implemented; failing closed".to_string(),
-            evaluator: PolicyEvaluatorType::Human,
-        }
-    }
-
-    fn evaluator_type(&self) -> PolicyEvaluatorType {
-        PolicyEvaluatorType::Human
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,25 +136,8 @@ mod tests {
     }
 
     #[test]
-    fn terminal_human_fails_closed() {
-        let human = TerminalHuman::new();
-        let decision = human.evaluate(&make_request(), &make_classification(), &make_context());
-        assert_eq!(decision.kind, PolicyDecisionKind::Deny);
-        assert!(decision.reasoning.contains("failing closed"));
-    }
-
-    #[test]
-    fn terminal_human_default() {
-        let human = TerminalHuman::default();
-        assert_eq!(human.evaluator_type(), PolicyEvaluatorType::Human);
-    }
-
-    #[test]
     fn evaluator_type_is_human() {
         let mock = MockHuman::always_allow();
         assert_eq!(mock.evaluator_type(), PolicyEvaluatorType::Human);
-
-        let terminal = TerminalHuman::new();
-        assert_eq!(terminal.evaluator_type(), PolicyEvaluatorType::Human);
     }
 }

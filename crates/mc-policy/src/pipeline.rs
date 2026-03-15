@@ -28,8 +28,9 @@ pub struct PipelineResult {
 /// - If an evaluator returns **Escalate**, the pipeline passes to the next evaluator.
 /// - If an evaluator returns **Allow**, the pipeline continues to the next evaluator
 ///   (or returns Allow if this is the last evaluator).
-/// - If the pipeline exhausts all evaluators with no definitive decision
-///   (all escalated), it **fails closed** and returns Deny.
+/// - If the pipeline exhausts all evaluators with **Escalate**, it returns
+///   **Escalate** so the integration layer (e.g. Claude Code hook) can handle
+///   LLM-based judgment via the host agent.
 /// - An empty pipeline returns Deny (fail closed).
 pub struct PolicyPipeline {
     evaluators: Vec<Box<dyn PolicyEvaluator>>,
@@ -104,10 +105,11 @@ impl PolicyPipeline {
 
         let decision = match &last_decision {
             Some(d) if d.kind == PolicyDecisionKind::Allow => last_decision.unwrap(),
+            Some(d) if d.kind == PolicyDecisionKind::Escalate => last_decision.unwrap(),
             _ => PolicyDecision {
                 policy_id: PolicyId::new(),
                 kind: PolicyDecisionKind::Deny,
-                reasoning: "Pipeline exhausted with no Allow decision: fail closed".to_string(),
+                reasoning: "Pipeline exhausted with no decision: fail closed".to_string(),
                 evaluator: PolicyEvaluatorType::Deterministic,
             },
         };
@@ -156,12 +158,14 @@ impl PolicyPipeline {
         // If we get here, check the last decision
         match &last_decision {
             Some(d) if d.kind == PolicyDecisionKind::Allow => last_decision.unwrap(),
+            // Propagate Escalate to the integration layer (e.g. Claude Code hook)
+            // for LLM-based judgment via the host agent.
+            Some(d) if d.kind == PolicyDecisionKind::Escalate => last_decision.unwrap(),
             _ => {
-                // All escalated or no evaluators returned Allow: fail closed
                 PolicyDecision {
                     policy_id: PolicyId::new(),
                     kind: PolicyDecisionKind::Deny,
-                    reasoning: "Pipeline exhausted with no Allow decision: fail closed".to_string(),
+                    reasoning: "Pipeline exhausted with no decision: fail closed".to_string(),
                     evaluator: PolicyEvaluatorType::Deterministic,
                 }
             }
@@ -290,8 +294,8 @@ mod tests {
     }
 
     #[test]
-    fn all_escalate_then_deny() {
-        // All escalate -> fail closed (Deny)
+    fn all_escalate_propagates() {
+        // All escalate -> Escalate propagated to integration layer
         let mut pipeline = PolicyPipeline::new();
         pipeline.add_evaluator(Box::new(MockLlmJudge::always_escalate()));
         pipeline.add_evaluator(Box::new(MockHuman::always_escalate()));
@@ -300,8 +304,7 @@ mod tests {
         let cls = normal_classification();
         let decision = pipeline.evaluate(&req, &cls, &default_context());
 
-        assert_eq!(decision.kind, PolicyDecisionKind::Deny);
-        assert!(decision.reasoning.contains("fail closed"));
+        assert_eq!(decision.kind, PolicyDecisionKind::Escalate);
     }
 
     #[test]

@@ -17,8 +17,9 @@ auditable before it reaches the outside world.
 - **Two-dimensional permission model** -- structural _capabilities_ define what
   resources an agent may touch; behavioral _policies_ decide whether a specific
   action is appropriate in context.
-- **Multi-stage policy pipeline** -- deterministic rules, LLM judge, and
-  human-in-the-loop escalation, evaluated in order with fail-closed semantics.
+- **Multi-stage policy pipeline** -- deterministic rules run in-process; when
+  uncertain, the pipeline returns _Escalate_ and the integration layer (e.g.
+  Claude Code hook) asks the host LLM to judge -- no separate API key needed.
 - **Encrypted credential vault** -- AES-256-GCM encryption with Argon2id key
   derivation. Credentials are bound to resource patterns and injected only when
   policy allows.
@@ -165,7 +166,7 @@ mission-clearance policy list
 |---|---|
 | **mc-core** | Core domain types: missions, capabilities, operations, policies, resources |
 | **mc-kernel** | Operation classifier, capability checker, content analyzer, session tracker |
-| **mc-policy** | Multi-stage policy pipeline: deterministic rules, LLM judge, human review |
+| **mc-policy** | Deterministic policy pipeline with escalation to host LLM via integration layer |
 | **mc-trace** | Append-only event log with SHA-256 chaining and mission delegation graph |
 | **mc-vault** | AES-256-GCM encrypted credential store with Argon2id key derivation |
 | **mc-adapters** | Protocol adapters for HTTP, SQL, shell, and tool-call traffic |
@@ -199,10 +200,14 @@ are implemented and tested:
 - Protocol adapters for HTTP, SQL, shell, and tool calls
 - Content analysis (reverse shell detection, exfiltration detection, obfuscation detection, prompt injection detection)
 
+**LLM judge architecture:** When the deterministic pipeline returns `Escalate`,
+the integration layer handles LLM-based judgment. In the Claude Code plugin,
+the pre-tool-use hook asks the host Claude instance to evaluate the operation
+and call `mc_approve_escalation` or `mc_deny_escalation`. This means no
+separate LLM API key or HTTP call is needed -- the host agent _is_ the judge.
+
 **Planned for future releases:**
 
-- LLM judge policy evaluator (the interface exists; the LLM integration is not yet wired)
-- Human-in-the-loop escalation and review (the interface exists; the UI/notification flow is not yet implemented)
 - Persistent storage backends (currently in-memory / SQLite)
 - Policy hot-reloading
 - Metrics and observability integration

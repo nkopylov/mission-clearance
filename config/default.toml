@@ -31,16 +31,10 @@ sandbox = "none"
 mode = "wrapper"
 
 [policy_pipeline]
-layers = ["deterministic", "llm", "human"]
-
-[policy_pipeline.llm]
-provider = "anthropic"
-model = "claude-sonnet-4-6"
-max_context_events = 50
-
-[policy_pipeline.human]
-interface = "terminal"
-timeout = "5m"
+# The deterministic layer runs in-process.  When it returns "Escalate",
+# the integration layer (e.g. Claude Code hook) asks the host LLM to
+# judge the operation — no separate API key or HTTP call is needed.
+layers = ["deterministic"]
 
 [trace]
 path = "~/.mission-clearance/trace.db"

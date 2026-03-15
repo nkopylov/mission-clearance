@@ -1,7 +1,9 @@
 //! Multi-stage policy pipeline for Mission Clearance.
 //!
-//! Evaluates operations through a chain of policy stages -- deterministic rules,
-//! LLM judge, and human-in-the-loop escalation -- with fail-closed semantics.
+//! The pipeline evaluates operations through deterministic rules and returns
+//! Allow, Deny, or Escalate.  When integrated with Claude Code, the hook layer
+//! handles Escalate decisions by asking the host LLM to act as the judge --
+//! no separate LLM API call is needed.
 
 pub mod deterministic;
 /// Adaptive feedback loop that spawns a sub-agent to update pattern lists.
