@@ -10,6 +10,7 @@ use mc_core::capability::{Capability, Constraints};
 use mc_core::id::{CapabilityId, MissionToken, RequestId};
 use mc_kernel::signal_enricher::{HeuristicEnricher, SignalEnricher};
 use mc_core::operation::{Operation, OperationContext, OperationRequest};
+#[cfg(feature = "feedback-loop")]
 use mc_policy::feedback::FeedbackLoop;
 use mc_core::policy::{EvaluationContext, PolicyDecisionKind};
 use mc_core::resource::{ResourcePattern, ResourceUri};
@@ -25,6 +26,7 @@ use mc_policy::deterministic::DeterministicEvaluator;
 pub struct EmbeddedKernel {
     state: Arc<AppState>,
     signal_enricher: Box<dyn SignalEnricher>,
+    #[cfg(feature = "feedback-loop")]
     feedback_loop: Option<FeedbackLoop>,
 }
 
@@ -52,12 +54,14 @@ impl EmbeddedKernel {
                 pipeline.add_evaluator(Box::new(DeterministicEvaluator::with_defaults()));
                 pipeline
             },
+            #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
         });
 
         Ok(Self {
             state,
             signal_enricher: Box::new(HeuristicEnricher::new()),
+            #[cfg(feature = "feedback-loop")]
             feedback_loop: FeedbackLoop::auto_detect(),
         })
     }
@@ -67,6 +71,7 @@ impl EmbeddedKernel {
         Self {
             state,
             signal_enricher: Box::new(HeuristicEnricher::new()),
+            #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
         }
     }
@@ -75,6 +80,9 @@ impl EmbeddedKernel {
     ///
     /// When enabled, disagreements between deterministic and LLM evaluators
     /// trigger a sub-agent that modifies the source code pattern lists.
+    ///
+    /// Only available when compiled with the `feedback-loop` feature.
+    #[cfg(feature = "feedback-loop")]
     pub fn with_feedback_loop(mut self, project_root: std::path::PathBuf) -> Self {
         self.feedback_loop = Some(FeedbackLoop::new(project_root));
         self
@@ -372,6 +380,7 @@ impl EmbeddedKernel {
             .evaluate_with_trace(&op_request, &classification, &eval_context);
 
         // Trigger feedback loop if there's a disagreement.
+        #[cfg(feature = "feedback-loop")]
         if let Some(ref feedback) = self.feedback_loop {
             feedback.check_and_learn(&pipeline_result.trace, &op_request, &classification);
         }
@@ -492,6 +501,7 @@ impl EmbeddedKernel {
             .evaluate_with_trace(&op_request, &classification, &eval_context);
 
         // Trigger feedback loop if there's a disagreement.
+        #[cfg(feature = "feedback-loop")]
         if let Some(ref feedback) = self.feedback_loop {
             feedback.check_and_learn(&pipeline_result.trace, &op_request, &classification);
         }

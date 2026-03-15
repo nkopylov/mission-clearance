@@ -3,6 +3,10 @@ name = "mc-sdk"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+feedback-loop = ["mc-policy/feedback-loop", "mc-api/feedback-loop"]
+
 [dependencies]
 mc-core = { path = "../mc-core" }
 mc-kernel = { path = "../mc-kernel" }

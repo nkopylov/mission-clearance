@@ -7,6 +7,9 @@
 //! network tool list, so det says Allow. The MockLlmJudge says Deny.
 //! The feedback loop detects the false negative and generates a prompt for
 //! a sub-agent to add `"http"` to the `network_cmds` pattern list.
+//!
+//! These tests require the `feedback-loop` feature flag to be enabled.
+#![cfg(feature = "feedback-loop")]
 
 use std::sync::{Arc, Mutex};
 

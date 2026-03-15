@@ -3,6 +3,17 @@ name = "mc-policy"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+## Enable the adaptive feedback loop.
+##
+## WARNING: This feature spawns `claude --dangerously-skip-permissions` as a
+## sub-process and may rebuild + exec() into a new binary at runtime.  It is
+## intended **only** for local development experimentation.  NEVER enable this
+## in production, CI, or any environment where untrusted input could influence
+## the pattern-learning prompt.
+feedback-loop = []
+
 [dependencies]
 mc-core = { path = "../mc-core" }
 mc-kernel = { path = "../mc-kernel" }

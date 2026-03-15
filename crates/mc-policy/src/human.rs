@@ -6,8 +6,8 @@ use mc_core::policy::{
 
 /// Mock human-in-the-loop evaluator for testing.
 ///
-/// Always returns a preconfigured decision. Use this in tests
-/// and development when interactive human input is not available.
+/// Always returns a preconfigured decision.  Use this in tests and development
+/// when interactive human input is not available.
 pub struct MockHuman {
     decision: PolicyDecisionKind,
     reasoning: String,
@@ -59,16 +59,26 @@ impl PolicyEvaluator for MockHuman {
     }
 }
 
-/// Terminal-based human-in-the-loop evaluator.
+/// Terminal-based human-in-the-loop evaluator (**not yet implemented**).
 ///
-/// In a real deployment, this would display the operation details
-/// to a terminal and prompt the human operator for a decision.
-/// Currently provides a minimal implementation that fails closed
-/// (denies by default) since interactive I/O is not always available.
+/// This evaluator is a planned feature for v0.2+.  In a real deployment it
+/// would display operation details to a terminal (or external review UI) and
+/// block until the human operator approves, denies, or escalates.
+///
+/// The current implementation always returns [`PolicyDecisionKind::Deny`]
+/// (fail-closed) because interactive I/O is not wired up.  Use
+/// [`MockHuman`] for testing pipelines that include a human evaluator.
 pub struct TerminalHuman;
 
 impl TerminalHuman {
+    /// Create a new `TerminalHuman` evaluator.
+    ///
+    /// **Note:** Human review is not yet implemented.  `evaluate()` will
+    /// always return `Deny` (fail-closed).
     pub fn new() -> Self {
+        tracing::info!(
+            "Human review evaluator is not yet implemented; evaluate() will fail closed (Deny)"
+        );
         Self
     }
 }
@@ -80,28 +90,30 @@ impl Default for TerminalHuman {
 }
 
 impl PolicyEvaluator for TerminalHuman {
+    /// Evaluate a policy decision via human review.
+    ///
+    /// **Not yet implemented.** Always returns [`PolicyDecisionKind::Deny`]
+    /// (fail-closed) because interactive terminal I/O is not wired up.
     fn evaluate(
         &self,
         request: &OperationRequest,
         classification: &OperationClassification,
         context: &EvaluationContext,
     ) -> PolicyDecision {
-        // In a real implementation, we would:
-        // 1. Print the operation details to the terminal
-        // 2. Wait for the human to input Allow/Deny/Escalate
-        // 3. Return the human's decision
-        tracing::warn!(
+        // Human review is not yet implemented — log at info level since
+        // this is expected behaviour, not an unexpected failure.
+        tracing::info!(
             resource = %request.resource,
             operation = ?request.operation,
             destructiveness = ?classification.destructiveness,
             mission_goal = %context.mission_goal,
-            "Terminal human review requested but interactive I/O not implemented; failing closed"
+            "Human review not yet implemented; failing closed"
         );
 
         PolicyDecision {
             policy_id: PolicyId::new(),
             kind: PolicyDecisionKind::Deny,
-            reasoning: "Terminal human review unavailable; failing closed".to_string(),
+            reasoning: "Human review not yet implemented; failing closed".to_string(),
             evaluator: PolicyEvaluatorType::Human,
         }
     }

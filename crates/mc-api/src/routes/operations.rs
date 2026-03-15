@@ -259,6 +259,7 @@ async fn submit_operation(
         .evaluate_with_trace(&op_request, &classification, &eval_context);
 
     // Trigger feedback loop if there's a disagreement.
+    #[cfg(feature = "feedback-loop")]
     if let Some(ref feedback) = state.feedback_loop {
         feedback.check_and_learn(&pipeline_result.trace, &op_request, &classification);
     }
