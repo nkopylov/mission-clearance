@@ -30,13 +30,17 @@ pub struct EmbeddedKernel {
 
 impl EmbeddedKernel {
     /// Create a new in-process kernel with all subsystems initialized in memory.
-    pub fn new(max_delegation_depth: u32) -> Result<Self> {
+    ///
+    /// The `vault_passphrase` is used to encrypt the in-memory vault.
+    /// Callers should source this from an environment variable or secure input
+    /// rather than hardcoding it.
+    pub fn new(max_delegation_depth: u32, vault_passphrase: &str) -> Result<Self> {
         let state = Arc::new(AppState {
             mission_manager: std::sync::Mutex::new(
                 mc_kernel::manager::MissionManager::new(max_delegation_depth),
             ),
             vault: std::sync::Mutex::new(
-                mc_vault::store::VaultStore::new(":memory:", "embedded-kernel")
+                mc_vault::store::VaultStore::new(":memory:", vault_passphrase)
                     .context("failed to create in-memory vault")?,
             ),
             event_log: std::sync::Mutex::new(
@@ -53,6 +57,7 @@ impl EmbeddedKernel {
                 pipeline
             },
             feedback_loop: None,
+            expected_api_key: None,
         });
 
         Ok(Self {
@@ -586,7 +591,7 @@ mod tests {
     use super::*;
 
     fn kernel() -> EmbeddedKernel {
-        EmbeddedKernel::new(10).expect("failed to create embedded kernel")
+        EmbeddedKernel::new(10, "test-passphrase").expect("failed to create embedded kernel")
     }
 
     #[test]
@@ -841,7 +846,7 @@ mod tests {
 
     #[test]
     fn test_embedded_delegate_depth_limit() {
-        let k = EmbeddedKernel::new(1).unwrap();
+        let k = EmbeddedKernel::new(1, "test-passphrase").unwrap();
         let cap = CapabilitySpec {
             resource_pattern: "http://api.com/**".to_string(),
             operations: vec!["Read".to_string()],

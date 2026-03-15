@@ -131,6 +131,8 @@ struct Config {
     kernel: KernelConfig,
     #[serde(default)]
     server: ServerConfig,
+    #[serde(default)]
+    vault: VaultConfig,
 }
 
 #[derive(Deserialize)]
@@ -151,13 +153,31 @@ impl Default for KernelConfig {
 struct ServerConfig {
     #[serde(default = "default_port")]
     port: u16,
+    #[serde(default = "default_listen")]
+    listen: String,
+    /// Expected API key. Override with MC_API_KEY env var.
+    api_key: Option<String>,
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             port: default_port(),
+            listen: default_listen(),
+            api_key: None,
         }
+    }
+}
+
+#[derive(Deserialize)]
+struct VaultConfig {
+    /// Vault passphrase. Override with MC_VAULT_PASSPHRASE env var.
+    passphrase: Option<String>,
+}
+
+impl Default for VaultConfig {
+    fn default() -> Self {
+        Self { passphrase: None }
     }
 }
 
@@ -169,6 +189,45 @@ fn default_port() -> u16 {
     9090
 }
 
+fn default_listen() -> String {
+    "127.0.0.1".to_string()
+}
+
+/// Resolve the vault passphrase from (in order of priority):
+/// 1. MC_VAULT_PASSPHRASE environment variable
+/// 2. Config file vault.passphrase
+/// 3. A default with a warning log
+fn resolve_vault_passphrase(config: &Config) -> String {
+    if let Ok(env_pass) = std::env::var("MC_VAULT_PASSPHRASE") {
+        if !env_pass.is_empty() {
+            return env_pass;
+        }
+    }
+    if let Some(ref pass) = config.vault.passphrase {
+        if !pass.is_empty() {
+            return pass.clone();
+        }
+    }
+    tracing::warn!(
+        "No vault passphrase configured. Set MC_VAULT_PASSPHRASE or vault.passphrase in config. \
+         Using an ephemeral random passphrase for this session."
+    );
+    uuid::Uuid::new_v4().to_string()
+}
+
+/// Resolve the expected API key from (in order of priority):
+/// 1. MC_API_KEY environment variable
+/// 2. Config file server.api_key
+/// 3. None (dev mode: any non-empty key accepted)
+fn resolve_api_key(config: &Config) -> Option<String> {
+    if let Ok(env_key) = std::env::var("MC_API_KEY") {
+        if !env_key.is_empty() {
+            return Some(env_key);
+        }
+    }
+    config.server.api_key.clone()
+}
+
 fn load_config(path: &str) -> Config {
     match std::fs::read_to_string(path) {
         Ok(content) => toml::from_str(&content).unwrap_or_else(|e| {
@@ -176,11 +235,13 @@ fn load_config(path: &str) -> Config {
             Config {
                 kernel: KernelConfig::default(),
                 server: ServerConfig::default(),
+                vault: VaultConfig::default(),
             }
         }),
         Err(_) => Config {
             kernel: KernelConfig::default(),
             server: ServerConfig::default(),
+            vault: VaultConfig::default(),
         },
     }
 }
@@ -212,12 +273,23 @@ async fn main() -> Result<()> {
 async fn cmd_start(config: Config) -> Result<()> {
     use mc_policy::deterministic::DeterministicEvaluator;
 
+    let vault_passphrase = resolve_vault_passphrase(&config);
+    let expected_api_key = resolve_api_key(&config);
+
+    if expected_api_key.is_none() {
+        tracing::warn!(
+            "No API key configured (MC_API_KEY not set, server.api_key not in config). \
+             Any non-empty X-API-Key header will be accepted. \
+             Do NOT run in production without setting MC_API_KEY."
+        );
+    }
+
     let state = Arc::new(mc_api::state::AppState {
         mission_manager: std::sync::Mutex::new(mc_kernel::manager::MissionManager::new(
             config.kernel.max_delegation_depth,
         )),
         vault: std::sync::Mutex::new(
-            mc_vault::store::VaultStore::new(":memory:", "mission-clearance")
+            mc_vault::store::VaultStore::new(":memory:", &vault_passphrase)
                 .context("failed to create vault")?,
         ),
         event_log: std::sync::Mutex::new(
@@ -234,15 +306,16 @@ async fn cmd_start(config: Config) -> Result<()> {
             pipeline
         },
         feedback_loop: mc_policy::feedback::FeedbackLoop::auto_detect(),
+        expected_api_key,
     });
 
     let app = mc_api::create_router(state);
-    let addr = format!("0.0.0.0:{}", config.server.port);
+    let addr = format!("{}:{}", config.server.listen, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .context("failed to bind server address")?;
 
-    println!("Mission Clearance started on :{}", config.server.port);
+    tracing::info!("Mission Clearance started on {}", addr);
 
     axum::serve(listener, app)
         .await
@@ -254,7 +327,8 @@ async fn cmd_start(config: Config) -> Result<()> {
 // ---- Vault commands ----
 
 fn cmd_vault(command: VaultCommands, config: Config) -> Result<()> {
-    let kernel = EmbeddedKernel::new(config.kernel.max_delegation_depth)?;
+    let vault_passphrase = resolve_vault_passphrase(&config);
+    let kernel = EmbeddedKernel::new(config.kernel.max_delegation_depth, &vault_passphrase)?;
 
     match command {
         VaultCommands::Add {
@@ -318,7 +392,8 @@ fn cmd_vault(command: VaultCommands, config: Config) -> Result<()> {
 // ---- Mission commands ----
 
 fn cmd_mission(command: MissionCommands, config: Config) -> Result<()> {
-    let kernel = EmbeddedKernel::new(config.kernel.max_delegation_depth)?;
+    let vault_passphrase = resolve_vault_passphrase(&config);
+    let kernel = EmbeddedKernel::new(config.kernel.max_delegation_depth, &vault_passphrase)?;
 
     match command {
         MissionCommands::Create { goal } => {
@@ -359,7 +434,8 @@ fn cmd_mission(command: MissionCommands, config: Config) -> Result<()> {
 // ---- Trace commands ----
 
 fn cmd_trace(command: TraceCommands, config: Config) -> Result<()> {
-    let kernel = EmbeddedKernel::new(config.kernel.max_delegation_depth)?;
+    let vault_passphrase = resolve_vault_passphrase(&config);
+    let kernel = EmbeddedKernel::new(config.kernel.max_delegation_depth, &vault_passphrase)?;
 
     match command {
         TraceCommands::Show { mission_id } => {
@@ -446,7 +522,8 @@ fn cmd_trace(command: TraceCommands, config: Config) -> Result<()> {
 // ---- Policy commands ----
 
 fn cmd_policy(command: PolicyCommands, config: Config) -> Result<()> {
-    let kernel = EmbeddedKernel::new(config.kernel.max_delegation_depth)?;
+    let vault_passphrase = resolve_vault_passphrase(&config);
+    let kernel = EmbeddedKernel::new(config.kernel.max_delegation_depth, &vault_passphrase)?;
 
     match command {
         PolicyCommands::List => {
@@ -566,6 +643,9 @@ mod tests {
         let config = load_config("/nonexistent/path/config.toml");
         assert_eq!(config.kernel.max_delegation_depth, 10);
         assert_eq!(config.server.port, 9090);
+        assert_eq!(config.server.listen, "127.0.0.1");
+        assert!(config.server.api_key.is_none());
+        assert!(config.vault.passphrase.is_none());
     }
 
     #[test]
@@ -576,9 +656,17 @@ mod tests {
 
             [server]
             port = 8080
+            listen = "0.0.0.0"
+            api_key = "my-secret"
+
+            [vault]
+            passphrase = "vault-secret"
         "#;
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.kernel.max_delegation_depth, 5);
         assert_eq!(config.server.port, 8080);
+        assert_eq!(config.server.listen, "0.0.0.0");
+        assert_eq!(config.server.api_key.as_deref(), Some("my-secret"));
+        assert_eq!(config.vault.passphrase.as_deref(), Some("vault-secret"));
     }
 }

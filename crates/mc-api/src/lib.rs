@@ -10,7 +10,10 @@ use state::AppState;
 pub fn create_router(state: Arc<AppState>) -> axum::Router {
     axum::Router::new()
         .nest("/api/v1", api_routes())
-        .layer(axum::middleware::from_fn(auth::require_api_key))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_api_key,
+        ))
         .with_state(state)
 }
 
@@ -363,6 +366,7 @@ mod tests {
                 pipeline
             },
             feedback_loop: None,
+            expected_api_key: None,
         });
 
         let mission_token = {
@@ -471,6 +475,7 @@ mod tests {
                 pipeline
             },
             feedback_loop: None,
+            expected_api_key: None,
         });
 
         // Step 1: Create a mission with capability.
@@ -693,6 +698,7 @@ mod tests {
                 pipeline
             },
             feedback_loop: None,
+            expected_api_key: None,
         });
 
         let app = create_router(state);
