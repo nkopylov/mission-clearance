@@ -1,17 +1,22 @@
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
+use zeroize::Zeroizing;
 
 /// Tracks tainted values from the vault for exfiltration prevention.
 ///
 /// When a vault credential is accessed, the value is registered as tainted.
 /// Before any outbound operation, the taint tracker checks whether the
 /// request content contains any tainted value, preventing secret exfiltration.
+///
+/// Secret values are wrapped in [`Zeroizing`] so that their memory is
+/// overwritten with zeros when they are removed or when the tracker is dropped,
+/// mitigating the risk of secrets lingering in heap memory.
 pub struct TaintTracker {
     /// SHA-256 hashes of tainted values (for identification/logging).
     tainted_hashes: HashSet<String>,
     /// The actual tainted values, stored for substring matching.
-    /// These are secrets we already have access to in the proxy layer.
-    tainted_values: HashSet<String>,
+    /// Wrapped in `Zeroizing` to ensure secrets are cleared from memory on drop.
+    tainted_values: Vec<Zeroizing<String>>,
 }
 
 impl TaintTracker {
@@ -19,18 +24,21 @@ impl TaintTracker {
     pub fn new() -> Self {
         Self {
             tainted_hashes: HashSet::new(),
-            tainted_values: HashSet::new(),
+            tainted_values: Vec::new(),
         }
     }
 
     /// Register a value as tainted (called when a vault credential is accessed).
     ///
-    /// Stores a SHA-256 hash for identification and the value itself for
-    /// substring matching during content checks.
+    /// Stores a SHA-256 hash for identification and the value itself (wrapped
+    /// in a zeroizing container) for substring matching during content checks.
     pub fn register_taint(&mut self, value: &str) {
         let hash = Self::hash_value(value);
         self.tainted_hashes.insert(hash);
-        self.tainted_values.insert(value.to_string());
+        // Avoid duplicates while keeping zeroization guarantees.
+        if !self.tainted_values.iter().any(|v| v.as_str() == value) {
+            self.tainted_values.push(Zeroizing::new(value.to_string()));
+        }
     }
 
     /// Check if any tainted value appears as a substring of the given content.
@@ -51,7 +59,14 @@ impl TaintTracker {
     pub fn register_derived_taint(&mut self, derived_value: &str) {
         let hash = Self::hash_value(derived_value);
         self.tainted_hashes.insert(hash);
-        self.tainted_values.insert(derived_value.to_string());
+        if !self
+            .tainted_values
+            .iter()
+            .any(|v| v.as_str() == derived_value)
+        {
+            self.tainted_values
+                .push(Zeroizing::new(derived_value.to_string()));
+        }
     }
 
     /// Return the set of tainted value hashes (for logging/auditing).
@@ -158,5 +173,23 @@ mod tests {
         let tracker = TaintTracker::default();
         assert_eq!(tracker.taint_count(), 0);
         assert!(!tracker.check_taint("test"));
+    }
+
+    #[test]
+    fn duplicate_register_does_not_increase_count() {
+        let mut tracker = TaintTracker::new();
+        tracker.register_taint("same-secret");
+        tracker.register_taint("same-secret");
+
+        assert_eq!(tracker.taint_count(), 1);
+    }
+
+    #[test]
+    fn duplicate_derived_does_not_increase_count() {
+        let mut tracker = TaintTracker::new();
+        tracker.register_derived_taint("derived-val");
+        tracker.register_derived_taint("derived-val");
+
+        assert_eq!(tracker.taint_count(), 1);
     }
 }
