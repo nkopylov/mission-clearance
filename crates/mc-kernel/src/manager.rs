@@ -75,6 +75,7 @@ impl MissionManager {
             depth: 0,
             created_at: now,
             updated_at: now,
+            creator: None,
         };
 
         self.token_index.insert(token, id);
@@ -162,6 +163,7 @@ impl MissionManager {
             depth: child_depth,
             created_at: now,
             updated_at: now,
+            creator: None,
         };
 
         self.token_index.insert(token, id);

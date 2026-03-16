@@ -22,6 +22,7 @@ mc-policy = { path = "../mc-policy" }
 mc-vault = { path = "../mc-vault" }
 mc-trace = { path = "../mc-trace" }
 mc-api = { path = "../mc-api" }
+mc-graph = { path = "../mc-graph" }
 serde.workspace = true
 anyhow.workspace = true
 tokio.workspace = true

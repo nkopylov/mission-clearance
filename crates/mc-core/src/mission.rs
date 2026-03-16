@@ -1,4 +1,4 @@
-use crate::id::{CapabilityId, MissionId, MissionToken, PolicyId};
+use crate::id::{CapabilityId, MissionId, MissionToken, PolicyId, PrincipalId};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -31,6 +31,9 @@ pub struct Mission {
     pub depth: u32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// The principal who created this mission. `None` for legacy/anonymous missions.
+    #[serde(default)]
+    pub creator: Option<PrincipalId>,
 }
 
 impl Mission {
@@ -65,6 +68,7 @@ mod tests {
             depth: 0,
             created_at: now,
             updated_at: now,
+            creator: None,
         }
     }
 

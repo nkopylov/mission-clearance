@@ -18,6 +18,8 @@ mc-kernel = { path = "../mc-kernel" }
 mc-policy = { path = "../mc-policy" }
 mc-vault = { path = "../mc-vault" }
 mc-trace = { path = "../mc-trace" }
+mc-graph = { path = "../mc-graph" }
+mc-identity = { path = "../mc-identity" }
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true

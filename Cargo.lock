@@ -136,6 +136,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.89"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1060,6 +1071,8 @@ dependencies = [
  "chrono",
  "http-body-util",
  "mc-core",
+ "mc-graph",
+ "mc-identity",
  "mc-kernel",
  "mc-policy",
  "mc-trace",
@@ -1086,6 +1099,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-graph"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "hex",
+ "mc-core",
+ "mc-kernel",
+ "mc-trace",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "mc-identity"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "mc-core",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "mc-integration-tests"
 version = "0.1.0"
 dependencies = [
@@ -1093,6 +1143,7 @@ dependencies = [
  "chrono",
  "mc-api",
  "mc-core",
+ "mc-graph",
  "mc-kernel",
  "mc-policy",
  "mc-sdk",
@@ -1144,6 +1195,7 @@ dependencies = [
  "chrono",
  "mc-api",
  "mc-core",
+ "mc-graph",
  "mc-kernel",
  "mc-policy",
  "mc-trace",
@@ -1222,6 +1274,7 @@ dependencies = [
  "axum",
  "clap",
  "mc-api",
+ "mc-graph",
  "mc-kernel",
  "mc-policy",
  "mc-trace",

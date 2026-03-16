@@ -24,6 +24,7 @@ mc-policy = { path = "../mc-policy" }
 mc-api = { path = "../mc-api" }
 mc-vault = { path = "../mc-vault" }
 mc-trace = { path = "../mc-trace" }
+mc-graph = { path = "../mc-graph" }
 anyhow.workspace = true
 serde_json.workspace = true
 chrono.workspace = true

@@ -1,0 +1,53 @@
+You are evaluating a delegation chain for authorization in a permission system.
+
+## Delegation Chain
+
+{chain_summary}
+
+## Requested Operation
+
+- Operation: {operation}
+- Resource: {resource}
+
+## Org Context
+
+{org_context}
+
+## Delegation Constraints at Each Edge
+
+{edge_constraints}
+
+## Statistical Signals
+
+- Goal coherence score: {goal_coherence_score}
+- Chain depth: {chain_depth} (median: {median_depth})
+- Time from root to leaf delegation: {delegation_time_seconds}s
+
+## Analysis Required
+
+Evaluate this delegation chain on four dimensions:
+
+1. **Goal Coherence**: Does each sub-mission's goal logically derive from its parent's goal? Are the goals progressively narrower and more specific?
+
+2. **Delegation Intent**: Is the delegation pattern consistent with normal organizational behavior? Would a reasonable person in the delegator's position authorize this chain?
+
+3. **Escalation Patterns**: Does the chain look like an attempt to circumvent restrictions? Watch for:
+   - Rapid multi-level delegation (many levels in seconds)
+   - Trust level drops without corresponding scope narrowing
+   - Goals that diverge from the root mission's intent
+
+4. **Context Appropriateness**: Is delegating this specific operation to an AI agent reasonable given the organizational context? Consider:
+   - The sensitivity of the resource
+   - Whether the operation type (read/write/delete) is appropriate for AI delegation
+   - Whether human oversight is maintained at appropriate levels
+
+## Response Format
+
+Respond with JSON:
+{
+  "decision": "APPROVE" | "DENY" | "ESCALATE_TO_HUMAN",
+  "reasoning": "Brief explanation of your analysis",
+  "confidence": 0.0-1.0
+}
+
+Be conservative: when in doubt, ESCALATE_TO_HUMAN rather than APPROVE.

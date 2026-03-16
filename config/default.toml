@@ -43,3 +43,22 @@ graph_export_format = "dot"
 
 [operation_policies]
 include = ["defaults"]
+
+[identity]
+# Identity providers to try in order.
+providers = ["oidc", "api_key", "mission_token"]
+# Whether anonymous (identity-free) access is allowed.
+# Set to false in production to require identity for all operations.
+allow_anonymous = true
+
+[identity.oidc]
+# issuer = "https://accounts.google.com"
+# client_id = "mission-clearance"
+# jwks_uri = "https://accounts.google.com/.well-known/jwks.json"
+# email_claim = "email"
+# group_claim = "groups"
+
+[graph]
+path = "~/.mission-clearance/graph.db"
+delegation_policies = "default-delegation-policies.toml"
+chain_evaluation_prompt = "chain_evaluation_prompt.txt"

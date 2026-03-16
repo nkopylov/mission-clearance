@@ -250,6 +250,9 @@ async fn submit_operation(
         recent_operations: vec![],
         anomaly_history: vec![],
         executes_session_written_file: false,
+        principal_chain: vec![],
+        effective_trust_level: None,
+        chain_anomaly_flags: vec![],
     };
 
     // Drop the manager lock before policy evaluation.

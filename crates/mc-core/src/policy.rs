@@ -68,6 +68,15 @@ pub struct EvaluationContext {
     /// Used by the execute-after-write-review rule to detect write-then-execute attacks.
     #[serde(default)]
     pub executes_session_written_file: bool,
+    /// The delegation chain of principals from leaf to root. Empty in legacy mode.
+    #[serde(default)]
+    pub principal_chain: Vec<crate::principal::PrincipalSummary>,
+    /// The effective trust level of the requesting principal. `None` in legacy mode.
+    #[serde(default)]
+    pub effective_trust_level: Option<crate::principal::PrincipalTrustLevel>,
+    /// Anomaly flags detected during chain verification.
+    #[serde(default)]
+    pub chain_anomaly_flags: Vec<crate::delegation::ChainAnomalyFlag>,
 }
 
 /// A summary of a previously executed operation, used in evaluation context.

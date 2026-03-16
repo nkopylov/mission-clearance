@@ -1,5 +1,9 @@
 pub mod missions;
 pub mod operations;
+pub mod org;
+pub mod permissions;
 pub mod policies;
+pub mod principals;
+pub mod roles;
 pub mod trace;
 pub mod vault;
