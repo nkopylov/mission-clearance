@@ -1,29 +1,26 @@
 [package]
-name = "mc-sdk"
+name = "mc-graph"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-description = "Rust SDK with embedded kernel for Mission Clearance"
-
-[features]
-default = []
-feedback-loop = ["mc-policy/feedback-loop", "mc-api/feedback-loop"]
+description = "Permission graph storage and resolution for Mission Clearance"
 
 [dependencies]
 mc-core = { path = "../mc-core" }
 mc-kernel = { path = "../mc-kernel" }
-mc-policy = { path = "../mc-policy" }
-mc-vault = { path = "../mc-vault" }
 mc-trace = { path = "../mc-trace" }
-mc-api = { path = "../mc-api" }
-mc-graph = { path = "../mc-graph" }
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 anyhow.workspace = true
+chrono.workspace = true
+uuid.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-uuid.workspace = true
-chrono.workspace = true
+async-trait.workspace = true
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+hex = "0.4"

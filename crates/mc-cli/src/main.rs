@@ -198,6 +198,11 @@ async fn cmd_start(config: Config) -> Result<()> {
         #[cfg(feature = "feedback-loop")]
         feedback_loop: mc_policy::feedback::FeedbackLoop::auto_detect(),
         expected_api_key,
+        permission_graph: std::sync::Mutex::new(
+            mc_graph::store::PermissionGraphStore::new(":memory:")
+                .context("failed to create permission graph")?,
+        ),
+        delegation_engine: mc_graph::delegation_engine::DelegationChecker::permissive(),
     });
 
     let app = mc_api::create_router(state);

@@ -55,6 +55,10 @@ fn kernel_with_llm_deny(reason: &str) -> EmbeddedKernel {
         },
         feedback_loop: None, // We test detection separately
         expected_api_key: None,
+        permission_graph: Mutex::new(
+            mc_graph::store::PermissionGraphStore::new(":memory:").unwrap(),
+        ),
+        delegation_engine: mc_graph::delegation_engine::DelegationChecker::permissive(),
     });
     EmbeddedKernel::with_state(state)
 }
@@ -80,6 +84,10 @@ fn kernel_with_llm_allow() -> EmbeddedKernel {
         },
         feedback_loop: None,
         expected_api_key: None,
+        permission_graph: Mutex::new(
+            mc_graph::store::PermissionGraphStore::new(":memory:").unwrap(),
+        ),
+        delegation_engine: mc_graph::delegation_engine::DelegationChecker::permissive(),
     });
     EmbeddedKernel::with_state(state)
 }
@@ -176,6 +184,9 @@ fn feedback_trace_shows_disagreement() {
         recent_operations: vec![],
         anomaly_history: vec![],
         executes_session_written_file: false,
+        principal_chain: vec![],
+        effective_trust_level: None,
+        chain_anomaly_flags: vec![],
     };
 
     // Run pipeline with trace
@@ -258,6 +269,9 @@ fn feedback_no_disagreement_when_both_deny() {
         recent_operations: vec![],
         anomaly_history: vec![],
         executes_session_written_file: false,
+        principal_chain: vec![],
+        effective_trust_level: None,
+        chain_anomaly_flags: vec![],
     };
 
     let result = pipeline.evaluate_with_trace(&request, &classification, &context);
@@ -320,6 +334,9 @@ fn feedback_detects_false_positive() {
         recent_operations: vec![],
         anomaly_history: vec![],
         executes_session_written_file: false,
+        principal_chain: vec![],
+        effective_trust_level: None,
+        chain_anomaly_flags: vec![],
     };
 
     let result = pipeline.evaluate_with_trace(&request, &classification, &context);
@@ -373,6 +390,10 @@ fn feedback_loop_wired_into_kernel() {
         },
         feedback_loop: Some(FeedbackLoop::new(std::path::PathBuf::from("."))),
         expected_api_key: None,
+        permission_graph: Mutex::new(
+            mc_graph::store::PermissionGraphStore::new(":memory:").unwrap(),
+        ),
+        delegation_engine: mc_graph::delegation_engine::DelegationChecker::permissive(),
     });
     let k = EmbeddedKernel::with_state(state);
 
@@ -464,6 +485,9 @@ fn feedback_generate_full_agent_prompt() {
         recent_operations: vec![],
         anomaly_history: vec![],
         executes_session_written_file: false,
+        principal_chain: vec![],
+        effective_trust_level: None,
+        chain_anomaly_flags: vec![],
     };
 
     let result = pipeline.evaluate_with_trace(&request, &classification, &context);

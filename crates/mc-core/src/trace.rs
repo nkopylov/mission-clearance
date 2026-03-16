@@ -51,6 +51,22 @@ pub enum TraceEventType {
     TaintDetected,
     GoalDriftDetected,
     PromptInjectionSuspected,
+
+    // Permission graph
+    PrincipalCreated,
+    PrincipalSuspended,
+    PrincipalRevoked,
+    RoleAssigned,
+    RoleRevoked,
+    DelegationCreated,
+    DelegationRevoked,
+    ChainVerified,
+    ChainDenied,
+    ChainLlmEvaluated,
+    CascadeRevocationStarted,
+    CascadeRevocationCompleted,
+    OneTimePermissionConsumed,
+    BoundedAuthorizationCreated,
 }
 
 /// Format for graph export.
@@ -116,8 +132,23 @@ mod tests {
             TraceEventType::TaintDetected,
             TraceEventType::GoalDriftDetected,
             TraceEventType::PromptInjectionSuspected,
+            // Permission graph
+            TraceEventType::PrincipalCreated,
+            TraceEventType::PrincipalSuspended,
+            TraceEventType::PrincipalRevoked,
+            TraceEventType::RoleAssigned,
+            TraceEventType::RoleRevoked,
+            TraceEventType::DelegationCreated,
+            TraceEventType::DelegationRevoked,
+            TraceEventType::ChainVerified,
+            TraceEventType::ChainDenied,
+            TraceEventType::ChainLlmEvaluated,
+            TraceEventType::CascadeRevocationStarted,
+            TraceEventType::CascadeRevocationCompleted,
+            TraceEventType::OneTimePermissionConsumed,
+            TraceEventType::BoundedAuthorizationCreated,
         ];
-        assert_eq!(types.len(), 21);
+        assert_eq!(types.len(), 35);
         for t in &types {
             let json = serde_json::to_string(t).unwrap();
             let deser: TraceEventType = serde_json::from_str(&json).unwrap();

@@ -17,6 +17,10 @@ pub struct AppState {
     /// Expected API key for authentication. When `None`, any non-empty key is
     /// accepted (dev mode) with a warning logged on the first request.
     pub expected_api_key: Option<String>,
+    /// Permission graph store for principals, roles, delegation edges, etc.
+    pub permission_graph: Mutex<mc_graph::store::PermissionGraphStore>,
+    /// Delegation policy engine for evaluating delegation requests.
+    pub delegation_engine: mc_graph::delegation_engine::DelegationChecker,
 }
 
 impl AppState {
@@ -35,6 +39,10 @@ impl AppState {
             #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
             expected_api_key: None,
+            permission_graph: Mutex::new(
+                mc_graph::store::PermissionGraphStore::new(":memory:").unwrap(),
+            ),
+            delegation_engine: mc_graph::delegation_engine::DelegationChecker::permissive(),
         })
     }
 }

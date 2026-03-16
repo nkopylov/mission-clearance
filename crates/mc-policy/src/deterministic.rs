@@ -15,12 +15,21 @@ struct DeterministicRule {
         Box<dyn Fn(&OperationRequest, &OperationClassification) -> Option<PolicyDecisionKind> + Send + Sync>,
 }
 
+/// A deterministic rule that also has access to the evaluation context
+/// (principal chain, trust levels, chain anomaly flags).
+struct ContextAwareRule {
+    name: String,
+    evaluate:
+        Box<dyn Fn(&OperationRequest, &OperationClassification, &EvaluationContext) -> Option<PolicyDecisionKind> + Send + Sync>,
+}
+
 /// Deterministic (rule-based) policy evaluator.
 ///
 /// Evaluates hard rules against the operation classification axes.
 /// Returns the first matching rule's decision, or `Allow` if no rule matches.
 pub struct DeterministicEvaluator {
     rules: Vec<DeterministicRule>,
+    context_rules: Vec<ContextAwareRule>,
 }
 
 impl DeterministicEvaluator {
@@ -209,12 +218,101 @@ impl DeterministicEvaluator {
             },
         ];
 
-        Self { rules }
+        let context_rules = vec![
+            // --- Context-aware rules: trust level and chain anomalies ---
+            ContextAwareRule {
+                name: "agent-only-chain-escalate".to_string(),
+                evaluate: Box::new(|_req, _cls, ctx| {
+                    // If the entire chain is agents (no human root), escalate
+                    if !ctx.principal_chain.is_empty()
+                        && ctx.principal_chain.iter().all(|p| {
+                            p.kind == mc_core::principal::PrincipalKind::AiAgent
+                        })
+                    {
+                        Some(PolicyDecisionKind::Escalate)
+                    } else {
+                        None
+                    }
+                }),
+            },
+            ContextAwareRule {
+                name: "low-trust-destructive-deny".to_string(),
+                evaluate: Box::new(|_req, cls, ctx| {
+                    // Agent-level trust + destructive operation = deny
+                    if ctx.effective_trust_level
+                        == Some(mc_core::principal::PrincipalTrustLevel::Agent)
+                        && (cls.destructiveness == Destructiveness::High
+                            || cls.destructiveness == Destructiveness::Catastrophic)
+                    {
+                        Some(PolicyDecisionKind::Deny)
+                    } else {
+                        None
+                    }
+                }),
+            },
+            ContextAwareRule {
+                name: "chain-anomaly-unusual-depth".to_string(),
+                evaluate: Box::new(|_req, _cls, ctx| {
+                    if ctx.chain_anomaly_flags.iter().any(|f| {
+                        matches!(f, mc_core::delegation::ChainAnomalyFlag::UnusualDepth { .. })
+                    }) {
+                        Some(PolicyDecisionKind::Escalate)
+                    } else {
+                        None
+                    }
+                }),
+            },
+            ContextAwareRule {
+                name: "chain-anomaly-rapid-delegation".to_string(),
+                evaluate: Box::new(|_req, _cls, ctx| {
+                    if ctx.chain_anomaly_flags.iter().any(|f| {
+                        matches!(
+                            f,
+                            mc_core::delegation::ChainAnomalyFlag::RapidDelegation { .. }
+                        )
+                    }) {
+                        Some(PolicyDecisionKind::Escalate)
+                    } else {
+                        None
+                    }
+                }),
+            },
+            ContextAwareRule {
+                name: "chain-anomaly-low-goal-coherence".to_string(),
+                evaluate: Box::new(|_req, _cls, ctx| {
+                    if ctx.chain_anomaly_flags.iter().any(|f| {
+                        matches!(
+                            f,
+                            mc_core::delegation::ChainAnomalyFlag::LowGoalCoherence { score } if *score < 0.3
+                        )
+                    }) {
+                        Some(PolicyDecisionKind::Deny)
+                    } else if ctx.chain_anomaly_flags.iter().any(|f| {
+                        matches!(
+                            f,
+                            mc_core::delegation::ChainAnomalyFlag::LowGoalCoherence { .. }
+                        )
+                    }) {
+                        Some(PolicyDecisionKind::Escalate)
+                    } else {
+                        None
+                    }
+                }),
+            },
+        ];
+
+        Self {
+            rules,
+            context_rules,
+        }
     }
 
     /// Create a new evaluator with no rules (empty).
     pub fn new_empty() -> Self {
-        Self { rules: Vec::new() }
+        Self {
+            rules: Vec::new(),
+            context_rules: Vec::new(),
+        }
     }
 
     /// Add a custom rule to the evaluator.
@@ -227,6 +325,22 @@ impl DeterministicEvaluator {
             + 'static,
     ) {
         self.rules.push(DeterministicRule {
+            name: name.into(),
+            evaluate: Box::new(evaluate),
+        });
+    }
+
+    /// Add a context-aware rule that has access to the evaluation context
+    /// (principal chain, trust levels, chain anomaly flags).
+    pub fn add_context_rule(
+        &mut self,
+        name: impl Into<String>,
+        evaluate: impl Fn(&OperationRequest, &OperationClassification, &EvaluationContext) -> Option<PolicyDecisionKind>
+            + Send
+            + Sync
+            + 'static,
+    ) {
+        self.context_rules.push(ContextAwareRule {
             name: name.into(),
             evaluate: Box::new(evaluate),
         });
@@ -252,6 +366,18 @@ impl PolicyEvaluator for DeterministicEvaluator {
 
         for rule in &self.rules {
             if let Some(kind) = (rule.evaluate)(request, classification) {
+                return PolicyDecision {
+                    policy_id: PolicyId::new(),
+                    kind,
+                    reasoning: format!("Rule '{}' triggered", rule.name),
+                    evaluator: PolicyEvaluatorType::Deterministic,
+                };
+            }
+        }
+
+        // Context-aware rules (trust level, chain anomalies)
+        for rule in &self.context_rules {
+            if let Some(kind) = (rule.evaluate)(request, classification, context) {
                 return PolicyDecision {
                     policy_id: PolicyId::new(),
                     kind,
@@ -294,6 +420,9 @@ mod tests {
             recent_operations: vec![],
             anomaly_history: vec![],
             executes_session_written_file: false,
+            principal_chain: vec![],
+            effective_trust_level: None,
+            chain_anomaly_flags: vec![],
         }
     }
 
@@ -739,6 +868,155 @@ mod tests {
         let decision = eval.evaluate(&req, &cls, &default_context());
         assert_eq!(decision.kind, PolicyDecisionKind::Escalate);
         assert!(decision.reasoning.contains("signal-security-modification"));
+    }
+
+    // --- Context-aware rule tests ---
+
+    #[test]
+    fn escalate_agent_only_chain() {
+        let eval = DeterministicEvaluator::with_defaults();
+        let req = make_request("shell://localhost/bin");
+        let cls = normal_classification();
+        let mut ctx = default_context();
+        ctx.principal_chain = vec![
+            mc_core::principal::PrincipalSummary {
+                id: mc_core::id::PrincipalId::new(),
+                kind: mc_core::principal::PrincipalKind::AiAgent,
+                trust_level: mc_core::principal::PrincipalTrustLevel::Agent,
+                display_name: "Agent-1".to_string(),
+            },
+            mc_core::principal::PrincipalSummary {
+                id: mc_core::id::PrincipalId::new(),
+                kind: mc_core::principal::PrincipalKind::AiAgent,
+                trust_level: mc_core::principal::PrincipalTrustLevel::Agent,
+                display_name: "Agent-2".to_string(),
+            },
+        ];
+        let decision = eval.evaluate(&req, &cls, &ctx);
+        assert_eq!(decision.kind, PolicyDecisionKind::Escalate);
+        assert!(decision.reasoning.contains("agent-only-chain-escalate"));
+    }
+
+    #[test]
+    fn allow_chain_with_human_root() {
+        let eval = DeterministicEvaluator::with_defaults();
+        let req = make_request("shell://localhost/bin");
+        let cls = normal_classification();
+        let mut ctx = default_context();
+        ctx.principal_chain = vec![
+            mc_core::principal::PrincipalSummary {
+                id: mc_core::id::PrincipalId::new(),
+                kind: mc_core::principal::PrincipalKind::Human,
+                trust_level: mc_core::principal::PrincipalTrustLevel::Human,
+                display_name: "Alice".to_string(),
+            },
+            mc_core::principal::PrincipalSummary {
+                id: mc_core::id::PrincipalId::new(),
+                kind: mc_core::principal::PrincipalKind::AiAgent,
+                trust_level: mc_core::principal::PrincipalTrustLevel::Agent,
+                display_name: "Agent-1".to_string(),
+            },
+        ];
+        let decision = eval.evaluate(&req, &cls, &ctx);
+        assert_eq!(decision.kind, PolicyDecisionKind::Allow);
+    }
+
+    #[test]
+    fn deny_low_trust_destructive() {
+        let eval = DeterministicEvaluator::with_defaults();
+        let req = make_request("shell://localhost/bin");
+        let cls = make_classification(
+            Destructiveness::High,
+            Reversibility::Reversible,
+            DataFlowDirection::Internal,
+            TrustLevel::Known,
+            OperationPattern::Normal,
+            GoalRelevance::DirectlyRelevant,
+        );
+        let mut ctx = default_context();
+        ctx.effective_trust_level = Some(mc_core::principal::PrincipalTrustLevel::Agent);
+        let decision = eval.evaluate(&req, &cls, &ctx);
+        assert_eq!(decision.kind, PolicyDecisionKind::Deny);
+        assert!(decision.reasoning.contains("low-trust-destructive-deny"));
+    }
+
+    #[test]
+    fn allow_human_trust_destructive() {
+        let eval = DeterministicEvaluator::with_defaults();
+        let req = make_request("shell://localhost/bin");
+        let cls = make_classification(
+            Destructiveness::High,
+            Reversibility::Reversible,
+            DataFlowDirection::Internal,
+            TrustLevel::Known,
+            OperationPattern::Normal,
+            GoalRelevance::DirectlyRelevant,
+        );
+        let mut ctx = default_context();
+        ctx.effective_trust_level = Some(mc_core::principal::PrincipalTrustLevel::Human);
+        let decision = eval.evaluate(&req, &cls, &ctx);
+        assert_eq!(decision.kind, PolicyDecisionKind::Allow);
+    }
+
+    #[test]
+    fn escalate_unusual_depth_anomaly() {
+        let eval = DeterministicEvaluator::with_defaults();
+        let req = make_request("shell://localhost/bin");
+        let cls = normal_classification();
+        let mut ctx = default_context();
+        ctx.chain_anomaly_flags = vec![mc_core::delegation::ChainAnomalyFlag::UnusualDepth {
+            depth: 12,
+            median: 3,
+        }];
+        let decision = eval.evaluate(&req, &cls, &ctx);
+        assert_eq!(decision.kind, PolicyDecisionKind::Escalate);
+        assert!(decision.reasoning.contains("chain-anomaly-unusual-depth"));
+    }
+
+    #[test]
+    fn escalate_rapid_delegation_anomaly() {
+        let eval = DeterministicEvaluator::with_defaults();
+        let req = make_request("shell://localhost/bin");
+        let cls = normal_classification();
+        let mut ctx = default_context();
+        ctx.chain_anomaly_flags =
+            vec![mc_core::delegation::ChainAnomalyFlag::RapidDelegation {
+                levels: 4,
+                seconds: 1.5,
+            }];
+        let decision = eval.evaluate(&req, &cls, &ctx);
+        assert_eq!(decision.kind, PolicyDecisionKind::Escalate);
+        assert!(decision.reasoning.contains("chain-anomaly-rapid-delegation"));
+    }
+
+    #[test]
+    fn deny_very_low_goal_coherence() {
+        let eval = DeterministicEvaluator::with_defaults();
+        let req = make_request("shell://localhost/bin");
+        let cls = normal_classification();
+        let mut ctx = default_context();
+        ctx.chain_anomaly_flags =
+            vec![mc_core::delegation::ChainAnomalyFlag::LowGoalCoherence { score: 0.1 }];
+        let decision = eval.evaluate(&req, &cls, &ctx);
+        assert_eq!(decision.kind, PolicyDecisionKind::Deny);
+        assert!(decision
+            .reasoning
+            .contains("chain-anomaly-low-goal-coherence"));
+    }
+
+    #[test]
+    fn escalate_moderate_low_goal_coherence() {
+        let eval = DeterministicEvaluator::with_defaults();
+        let req = make_request("shell://localhost/bin");
+        let cls = normal_classification();
+        let mut ctx = default_context();
+        ctx.chain_anomaly_flags =
+            vec![mc_core::delegation::ChainAnomalyFlag::LowGoalCoherence { score: 0.5 }];
+        let decision = eval.evaluate(&req, &cls, &ctx);
+        assert_eq!(decision.kind, PolicyDecisionKind::Escalate);
+        assert!(decision
+            .reasoning
+            .contains("chain-anomaly-low-goal-coherence"));
     }
 
     #[test]

@@ -1,0 +1,62 @@
+# Default delegation policies for Mission Clearance.
+#
+# These rules determine who can delegate what to whom.
+# Evaluated top-down by priority (highest first). First match wins.
+# No match = Deny (fail-closed).
+
+# VPs and above can delegate anything to AI agents.
+[delegation.vp-delegates-to-ai]
+priority = 100
+effect = "Allow"
+delegator_min_level = "VP"
+target_type = "AiAgent"
+
+# Engineers: Read-only delegation to AI agents is allowed.
+[delegation.engineer-read-to-ai]
+priority = 80
+effect = "Allow"
+delegator_min_level = "Individual"
+target_type = "AiAgent"
+operations = ["Read"]
+
+# Engineers: Write delegation to AI agents requires approval.
+[delegation.engineer-write-to-ai]
+priority = 75
+effect = "RequireApproval"
+delegator_min_level = "Individual"
+target_type = "AiAgent"
+operations = ["Write"]
+
+# Nobody delegates production DB write/delete to AI without approval.
+[delegation.no-prod-db-ai]
+priority = 200
+effect = "RequireApproval"
+target_type = "AiAgent"
+operations = ["Write", "Delete"]
+resource = "db://production/**"
+
+# AI-to-AI delegation depth limit.
+[delegation.ai-depth-limit]
+priority = 150
+effect = "Deny"
+delegator_type = "AiAgent"
+target_type = "AiAgent"
+max_chain_depth = 3
+
+# Human-to-human delegation is always allowed.
+[delegation.human-to-human]
+priority = 50
+effect = "Allow"
+delegator_type = "Human"
+target_type = "Human"
+
+# Service accounts can delegate read to AI agents.
+[delegation.service-account-read-to-ai]
+priority = 70
+effect = "Allow"
+delegator_type = "ServiceAccount"
+target_type = "AiAgent"
+operations = ["Read"]
+
+# Default: deny all unmatched delegations (fail-closed).
+# This is implicit -- no matching rule means Deny.

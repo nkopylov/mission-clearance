@@ -30,6 +30,10 @@ fn api_routes() -> axum::Router<Arc<AppState>> {
         .nest("/trace", routes::trace::router())
         .nest("/policies", routes::policies::router())
         .nest("/operations", routes::operations::router())
+        .nest("/principals", routes::principals::router())
+        .nest("/roles", routes::roles::router())
+        .nest("/org", routes::org::router())
+        .nest("/permissions", routes::permissions::router())
 }
 
 #[cfg(test)]
@@ -373,6 +377,10 @@ mod tests {
             #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
             expected_api_key: None,
+            permission_graph: std::sync::Mutex::new(
+                mc_graph::store::PermissionGraphStore::new(":memory:").unwrap(),
+            ),
+            delegation_engine: mc_graph::delegation_engine::DelegationChecker::permissive(),
         });
 
         let mission_token = {
@@ -483,6 +491,10 @@ mod tests {
             #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
             expected_api_key: None,
+            permission_graph: std::sync::Mutex::new(
+                mc_graph::store::PermissionGraphStore::new(":memory:").unwrap(),
+            ),
+            delegation_engine: mc_graph::delegation_engine::DelegationChecker::permissive(),
         });
 
         // Step 1: Create a mission with capability.
@@ -707,6 +719,10 @@ mod tests {
             #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
             expected_api_key: None,
+            permission_graph: std::sync::Mutex::new(
+                mc_graph::store::PermissionGraphStore::new(":memory:").unwrap(),
+            ),
+            delegation_engine: mc_graph::delegation_engine::DelegationChecker::permissive(),
         });
 
         let app = create_router(state);

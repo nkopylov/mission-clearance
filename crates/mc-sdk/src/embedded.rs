@@ -60,6 +60,11 @@ impl EmbeddedKernel {
             #[cfg(feature = "feedback-loop")]
             feedback_loop: None,
             expected_api_key: None,
+            permission_graph: std::sync::Mutex::new(
+                mc_graph::store::PermissionGraphStore::new(":memory:")
+                    .context("failed to create in-memory permission graph")?,
+            ),
+            delegation_engine: mc_graph::delegation_engine::DelegationChecker::permissive(),
         });
 
         Ok(Self {
@@ -380,6 +385,9 @@ impl EmbeddedKernel {
             recent_operations: vec![],
             anomaly_history: vec![],
             executes_session_written_file: false,
+            principal_chain: vec![],
+            effective_trust_level: None,
+            chain_anomaly_flags: vec![],
         };
 
         // Drop the manager lock before policy evaluation.
@@ -505,6 +513,9 @@ impl EmbeddedKernel {
             recent_operations: vec![],
             anomaly_history: vec![],
             executes_session_written_file: false,
+            principal_chain: vec![],
+            effective_trust_level: None,
+            chain_anomaly_flags: vec![],
         };
 
         drop(mgr);

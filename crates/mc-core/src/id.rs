@@ -43,6 +43,15 @@ define_id!(VaultEntryId);
 define_id!(EventId);
 define_id!(MissionToken);
 
+// Permission graph IDs
+define_id!(PrincipalId);
+define_id!(RoleId);
+define_id!(TeamId);
+define_id!(OrgPositionId);
+define_id!(RoleAssignmentId);
+define_id!(DelegationEdgeId);
+define_id!(GrantId);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,5 +109,13 @@ mod tests {
         let _ = VaultEntryId::new();
         let _ = EventId::new();
         let _ = MissionToken::new();
+        // Permission graph IDs
+        let _ = PrincipalId::new();
+        let _ = RoleId::new();
+        let _ = TeamId::new();
+        let _ = OrgPositionId::new();
+        let _ = RoleAssignmentId::new();
+        let _ = DelegationEdgeId::new();
+        let _ = GrantId::new();
     }
 }
