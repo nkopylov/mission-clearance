@@ -36,9 +36,10 @@
   <!-- System overview -->
   <h2 class="section-heading">System Overview</h2>
   <p class="section-desc">
-    Mission Clearance is structured as a Rust workspace with focused crates.
+    Mission Clearance is structured as a Rust workspace with 10 focused crates.
     The plugin layer (Python scripts) handles integration with Claude Code,
-    while the Rust binary provides the kernel, policy engine, trace log, and vault.
+    while the Rust binary provides the kernel, policy engine, trace log, vault,
+    permission graph, and identity resolution.
   </p>
 
   <div class="arch-diagram">
@@ -59,9 +60,10 @@
    <span style="color: var(--purple)">mc-policy</span>   <span style="color: var(--orange)">mc-vault</span>   <span style="color: var(--green)">mc-trace</span>
    pipeline    AES-256    SHA-256
    rules       Argon2id   chained
-        |
-     <span style="color: var(--text-secondary)">mc-core</span>
-     domain types
+        |         |
+     <span style="color: var(--text-secondary)">mc-core</span>   <span style="color: var(--cyan)">mc-graph</span>        <span style="color: var(--accent)">mc-identity</span>
+     domain    permission      OIDC/JWT
+     types     graph + RBAC    identity resolution
 </pre>
   </div>
 
@@ -100,6 +102,60 @@
     <div class="crate-item">
       <h3>mc-cli</h3>
       <p>Binary entry point. Runs the server with <code>mission-clearance start</code>. Handles CLI argument parsing and startup.</p>
+    </div>
+    <div class="crate-item">
+      <h3>mc-graph</h3>
+      <p>Permission graph with SQLite-backed storage. Manages principals, roles, RBAC, delegation edges, chain verification, bounded authorizations, and cascading revocation.</p>
+    </div>
+    <div class="crate-item">
+      <h3>mc-identity</h3>
+      <p>Identity resolution via external providers. OIDC/JWT token validation, API key mapping, mission token resolution, and SCIM org chart synchronization.</p>
+    </div>
+  </div>
+
+  <!-- Permission Graph -->
+  <h2 class="section-heading">Permission Graph</h2>
+  <p class="section-desc">
+    The permission graph adds identity, RBAC, and delegation verification on top of
+    the existing capability kernel. When configured, it answers: <em>who</em> authorized
+    this agent, <em>can</em> they authorize this, and <em>is</em> the entire delegation
+    chain still valid?
+  </p>
+
+  <div class="cards">
+    <div class="card">
+      <h3>Delegation Graph (Layer 3)</h3>
+      <p>
+        Can Person B delegate capability C to Agent Z via Agent A?
+        Principals are connected by delegation edges with scoped constraints
+        (time bounds, operation limits, resource narrowing, sub-delegation control).
+        Chain verification walks from leaf to root, validating every link.
+      </p>
+    </div>
+    <div class="card">
+      <h3>RBAC (Layer 2)</h3>
+      <p>
+        Does Person B have capability C at all?
+        Role assignments with hierarchical inheritance, composite roles,
+        scoped assignments (global, team, resource), and separation of duties
+        (conflicting roles cannot be held simultaneously).
+      </p>
+    </div>
+    <div class="card">
+      <h3>Capability Kernel (Layer 1)</h3>
+      <p>
+        Existing fast-path check, unchanged. Does this mission have capability C
+        for resource R? Layers 2 and 3 run in parallel and feed context
+        (trust level, chain anomaly flags) into the policy pipeline.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Cascading Revocation</h3>
+      <p>
+        Revoking a principal or delegation edge cascades through the graph.
+        All downstream agents and their missions are recursively revoked.
+        Supports partial revocation of specific capabilities or edges.
+      </p>
     </div>
   </div>
 
