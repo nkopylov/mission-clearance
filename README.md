@@ -18,6 +18,13 @@ external action is checked, classified, and logged in a tamper-evident trace
 before it reaches the outside world. Dangerous operations are blocked outright;
 ambiguous ones are escalated to Claude itself for judgment.
 
+For multi-agent and enterprise deployments, Mission Clearance adds a
+**permission graph** layer that tracks who authorized what and whether they had
+the authority to do so. Principals (humans, AI agents, service accounts) are
+connected by delegation edges with scoped constraints. Chain verification walks
+the delegation graph from leaf agent to human root, enforcing RBAC, delegation
+policies, and trust levels at every link.
+
 Once started, Mission Clearance runs transparently. A pre-tool-use hook
 intercepts all tool calls, sends them to a local policy server, and blocks
 anything that violates the mission's constraints. You keep working normally --
@@ -35,6 +42,11 @@ Claude Code ──tool call──> PreToolUse Hook ──> MC Server
                               │         │         │
                            proceed    block    Claude judges
                                                (via MCP tools)
+
+                    (in parallel, if identity configured)
+                    Chain Verification ── walk delegation graph
+                    RBAC Resolution ──── effective role permissions
+                    Trust Level ──────── context-aware policy rules
 ```
 
 1. Claude Code attempts a tool call (Bash, Edit, Write, etc.)
@@ -206,6 +218,84 @@ Built-in deterministic rules are defined in `config/default-policies.toml`:
 - **unknown-destination-review** -- escalate outbound requests to unknown hosts
 - **goal-drift-detection** -- escalate operations unrelated to the mission goal
 
+### Context-aware rules (permission graph)
+
+When identity and delegation context is available, additional rules apply:
+
+- **agent-only-chain-escalate** -- escalate operations where the entire delegation chain is AI agents (no human root)
+- **low-trust-destructive-deny** -- deny destructive operations from low-trust principals (Agent trust level)
+- **chain-anomaly-unusual-depth** -- escalate chains deeper than 5 levels
+- **chain-anomaly-rapid-delegation** -- escalate chains with rapid multi-level delegation
+- **chain-anomaly-low-goal-coherence** -- deny/escalate when goal coherence across the chain is low
+
+### Delegation policies
+
+Configurable rules in `config/default-delegation-policies.toml` control who can
+delegate what to whom:
+
+```toml
+# VPs can delegate anything to AI
+[delegation.vp-delegates-to-ai]
+priority = 100
+condition = { delegator_min_level = "VP", target_type = "AiAgent" }
+effect = "Allow"
+
+# Nobody delegates prod DB write to AI without approval
+[delegation.no-prod-db-ai]
+priority = 200
+condition = { target_type = "AiAgent", operations = ["Write", "Delete"], resource = "db://production/**" }
+effect = "RequireApproval"
+```
+
+### Identity providers
+
+Configure external identity resolution in `mission-clearance.toml`:
+
+```toml
+[identity]
+providers = ["oidc", "api_key", "mission_token"]
+allow_anonymous = false
+
+[identity.oidc]
+issuer = "https://accounts.google.com"
+client_id = "mission-clearance"
+```
+
+## Permission Graph
+
+The permission graph adds three layers on top of the existing capability kernel:
+
+| Layer | Purpose |
+|---|---|
+| **Delegation Graph** | Can Person B delegate capability C to Agent Z via Agent A? Walk and verify the chain. |
+| **RBAC** | Does Person B have capability C at all? Role assignments, hierarchy, separation of duties. |
+| **Capability Kernel** (existing) | Does this mission have capability C for resource R? Fast-path check, unchanged. |
+
+### Chain Verification
+
+When an agent requests an operation, the system walks the delegation chain from
+the leaf agent up to the human root, verifying at each link:
+
+1. Delegation edge is valid (not expired, not revoked)
+2. Operations and resources are within the edge's scope
+3. Sub-delegation is allowed and within depth limits
+4. Principal kind is permitted by the parent edge
+5. Root principal has the authority via RBAC
+
+### REST APIs
+
+New API routes for managing the permission graph:
+
+| Endpoint | Description |
+|---|---|
+| `POST /api/v1/principals` | Create a principal (Human, AiAgent, ServiceAccount, Team) |
+| `GET /api/v1/roles/{id}` | Get role details with permissions and hierarchy |
+| `POST /api/v1/roles/assign` | Assign a role to a principal with scope |
+| `POST /api/v1/permissions/delegations` | Create a delegation edge with constraints |
+| `POST /api/v1/permissions/grants` | Create a bounded/one-time authorization |
+| `POST /api/v1/org/positions` | Create an org chart position |
+| `POST /api/v1/org/teams` | Create a team |
+
 ## Architecture
 
 ```
@@ -225,19 +315,22 @@ mission-clearance binary (Rust)
    mc-policy   mc-vault   mc-trace
    pipeline    AES-256    SHA-256
    rules       Argon2id   chained
-        │
-     mc-core
-     domain types
+        │         │
+     mc-core   mc-graph        mc-identity
+     domain    permission      OIDC/JWT
+     types     graph + RBAC    identity resolution
 ```
 
 | Crate | Role |
 |---|---|
-| **mc-core** | Domain types: missions, capabilities, operations, policies, resources |
-| **mc-kernel** | Classifier, capability checker, content analyzer, session tracker |
-| **mc-policy** | Deterministic policy pipeline with escalation support |
+| **mc-core** | Domain types: missions, capabilities, operations, policies, resources, principals, roles, org chart |
+| **mc-kernel** | Classifier, capability checker, content analyzer, session tracker, graph capability checker |
+| **mc-policy** | Deterministic + context-aware policy pipeline with escalation support and trust-level rules |
 | **mc-trace** | Append-only SHA-256 chained event log and mission delegation graph |
 | **mc-vault** | AES-256-GCM encrypted credential store with Argon2id key derivation |
-| **mc-api** | Internal HTTP server (axum) used by the hook and MCP tools |
+| **mc-graph** | Permission graph: principals, roles, RBAC, delegation edges, chain verification, bounded authorizations, cascading revocation |
+| **mc-identity** | Identity resolution: OIDC/JWT token validation, API key mapping, mission token resolution, SCIM org sync |
+| **mc-api** | Internal HTTP server (axum) with REST APIs for missions, principals, roles, org, permissions |
 | **mc-sdk** | Embedded kernel used internally by the server |
 | **mc-cli** | Binary that runs the server (`mission-clearance start`) |
 

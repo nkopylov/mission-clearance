@@ -241,6 +241,101 @@
 <span class="var">include</span> = [<span class="str">"defaults"</span>]</code></pre>
   </div>
 
+  <!-- Identity -->
+  <h2 class="section-subheading">Identity Providers</h2>
+  <div class="config-section">
+    <h3><code>[identity]</code></h3>
+    <pre><code><span class="cmt"># Identity resolution providers (tried in order)</span>
+<span class="var">providers</span> = [<span class="str">"oidc"</span>, <span class="str">"api_key"</span>, <span class="str">"mission_token"</span>]
+
+<span class="cmt"># If false, requests without valid identity are rejected</span>
+<span class="var">allow_anonymous</span> = <span class="kw">false</span>
+
+<span class="cmt"># OIDC/JWT configuration</span>
+[<span class="var">identity.oidc</span>]
+<span class="var">issuer</span> = <span class="str">"https://accounts.google.com"</span>
+<span class="var">client_id</span> = <span class="str">"mission-clearance"</span>
+<span class="var">jwks_uri</span> = <span class="str">"https://accounts.google.com/.well-known/jwks.json"</span>
+<span class="var">email_claim</span> = <span class="str">"email"</span>
+<span class="var">group_claim</span> = <span class="str">"groups"</span>
+<span class="var">group_mapping</span> = { <span class="str">"engineering"</span> = <span class="str">"team-engineering"</span> }</code></pre>
+
+    <div class="table-wrap" style="margin-top: 16px;">
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>providers</code></td>
+            <td>array</td>
+            <td><code>[]</code></td>
+            <td>Identity provider chain. Options: <code>"oidc"</code>, <code>"api_key"</code>, <code>"mission_token"</code></td>
+          </tr>
+          <tr>
+            <td><code>allow_anonymous</code></td>
+            <td>boolean</td>
+            <td><code>true</code></td>
+            <td>Allow requests without valid identity (backward compatible). Set to <code>false</code> for production.</td>
+          </tr>
+          <tr>
+            <td><code>identity.oidc.issuer</code></td>
+            <td>string</td>
+            <td>&mdash;</td>
+            <td>OIDC token issuer URL (Google, Okta, Azure AD, etc.)</td>
+          </tr>
+          <tr>
+            <td><code>identity.oidc.client_id</code></td>
+            <td>string</td>
+            <td>&mdash;</td>
+            <td>Expected <code>aud</code> claim in JWT tokens</td>
+          </tr>
+          <tr>
+            <td><code>identity.oidc.group_mapping</code></td>
+            <td>table</td>
+            <td><code>{}</code></td>
+            <td>Map OIDC group claims to MC team IDs</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Delegation policies -->
+  <h2 class="section-subheading">Delegation Policies</h2>
+  <div class="config-section">
+    <h3><code>[delegation.*]</code></h3>
+    <pre><code><span class="cmt"># VPs can delegate anything to AI agents</span>
+[<span class="var">delegation.vp-delegates-to-ai</span>]
+<span class="var">priority</span> = <span class="num">100</span>
+<span class="var">condition</span> = { <span class="var">delegator_min_level</span> = <span class="str">"VP"</span>, <span class="var">target_type</span> = <span class="str">"AiAgent"</span> }
+<span class="var">effect</span> = <span class="str">"Allow"</span>
+
+<span class="cmt"># Engineers: Read-only to AI</span>
+[<span class="var">delegation.engineer-read-to-ai</span>]
+<span class="var">priority</span> = <span class="num">80</span>
+<span class="var">condition</span> = { <span class="var">delegator_min_level</span> = <span class="str">"Individual"</span>, <span class="var">target_type</span> = <span class="str">"AiAgent"</span>, <span class="var">operations</span> = [<span class="str">"Read"</span>] }
+<span class="var">effect</span> = <span class="str">"Allow"</span>
+
+<span class="cmt"># Prod DB writes to AI always require approval</span>
+[<span class="var">delegation.no-prod-db-ai</span>]
+<span class="var">priority</span> = <span class="num">200</span>
+<span class="var">condition</span> = { <span class="var">target_type</span> = <span class="str">"AiAgent"</span>, <span class="var">operations</span> = [<span class="str">"Write"</span>, <span class="str">"Delete"</span>], <span class="var">resource</span> = <span class="str">"db://production/**"</span> }
+<span class="var">effect</span> = <span class="str">"RequireApproval"</span>
+
+<span class="cmt"># AI-to-AI depth limit</span>
+[<span class="var">delegation.ai-depth-limit</span>]
+<span class="var">priority</span> = <span class="num">150</span>
+<span class="var">condition</span> = { <span class="var">delegator_type</span> = <span class="str">"AiAgent"</span>, <span class="var">target_type</span> = <span class="str">"AiAgent"</span>, <span class="var">max_chain_depth</span> = <span class="num">3</span> }
+<span class="var">effect</span> = <span class="str">"Deny"</span></code></pre>
+
+    <p style="color: var(--text-secondary); margin-top: 16px; font-size: 14px;">
+      Delegation policies are evaluated in <strong>priority order</strong> (highest first).
+      If no rule matches, the default is <strong>Deny</strong> (fail-closed). Effects:
+      <code>Allow</code>, <code>Deny</code>, <code>RequireApproval</code>.
+    </p>
+  </div>
+
   <!-- Environment variables -->
   <h2 class="section-heading">Environment Variables</h2>
 
@@ -347,6 +442,57 @@
     with <code>escalate_when</code> pause the operation and ask Claude (the LLM judge)
     to review it. Priority determines evaluation order &mdash; the first matching rule wins.
   </p>
+
+  <!-- Context-Aware Rules -->
+  <h2 class="section-heading">Context-Aware Rules (Permission Graph)</h2>
+  <p class="section-desc">
+    When identity and delegation context is available, the policy pipeline evaluates
+    additional context-aware rules based on principal trust levels and chain properties.
+  </p>
+
+  <div class="detection-list">
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon orange">&#x1f517;</span>
+        agent-only-chain-escalate
+      </h3>
+      <p>Escalate operations where the entire delegation chain is AI agents with no human root.</p>
+    </div>
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon red">&#x1f6e1;</span>
+        low-trust-destructive-deny
+      </h3>
+      <p>Deny destructive operations (High destructiveness or above) from principals with Agent-level trust.</p>
+    </div>
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon orange">&#x1f4cf;</span>
+        chain-anomaly-unusual-depth
+      </h3>
+      <p>Escalate when the delegation chain depth exceeds 5 levels.</p>
+    </div>
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon orange">&#x26a1;</span>
+        chain-anomaly-rapid-delegation
+      </h3>
+      <p>Escalate when rapid multi-level delegation is detected (potential automated privilege escalation).</p>
+    </div>
+
+    <div class="detection-item">
+      <h3>
+        <span class="icon red">&#x1f3af;</span>
+        chain-anomaly-low-goal-coherence
+      </h3>
+      <p>Deny or escalate when goal coherence across the delegation chain is low (sub-missions diverge from parent goals).</p>
+    </div>
+
+  </div>
 
   <!-- Page navigation -->
   <div class="page-nav">

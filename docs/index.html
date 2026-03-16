@@ -38,7 +38,8 @@
     <p class="tagline">
       Security harness for Claude Code. Intercepts every tool call, evaluates it
       against capability-scoped policies, and blocks dangerous operations before
-      they reach the outside world.
+      they reach the outside world. For multi-agent deployments, adds identity-aware
+      delegation verification with RBAC, chain verification, and trust-level enforcement.
     </p>
   </section>
 
@@ -142,6 +143,45 @@ cargo build --release</code></pre>
     </div>
   </div>
 
+  <!-- Permission Graph -->
+  <h2 class="section-heading">Permission Graph</h2>
+  <p class="section-desc">
+    For multi-agent and enterprise deployments, Mission Clearance adds a permission
+    graph that tracks <strong>who</strong> authorized each agent and whether they had
+    the authority to do so.
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <h3>Identity</h3>
+        <p>Resolve <strong>who</strong> is making the request via OIDC/JWT, API keys, or mission tokens. Map external identities to principals in the graph.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <h3>RBAC</h3>
+        <p>Check <strong>what</strong> the principal can do via role assignments with hierarchical inheritance, scoped permissions, and separation of duties.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <h3>Chain Verification</h3>
+        <p>Walk the delegation chain from leaf agent to human root, verifying every link: expiration, scope, sub-delegation rights, and principal trust levels.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-number">4</div>
+      <div class="step-content">
+        <h3>Trust Enforcement</h3>
+        <p>Context-aware rules enforce trust levels: deny destructive ops from low-trust agents, escalate chains without human roots, flag anomalous delegation patterns.</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Explore docs -->
   <h2 class="section-heading">Explore the Documentation</h2>
 
@@ -156,11 +196,11 @@ cargo build --release</code></pre>
     </a>
     <a href="architecture.html" class="card">
       <h3>Architecture</h3>
-      <p>Crate map, data flow, policy pipeline, trace system, and vault internals.</p>
+      <p>Crate map, data flow, policy pipeline, trace system, vault, permission graph, and identity resolution.</p>
     </a>
     <a href="configuration.html" class="card">
       <h3>Configuration</h3>
-      <p>TOML config reference, environment variables, and default policy rules.</p>
+      <p>TOML config reference, environment variables, default policies, delegation rules, and identity providers.</p>
     </a>
   </div>
 
